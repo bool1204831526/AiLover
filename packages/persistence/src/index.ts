@@ -2,14 +2,17 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import Database from 'better-sqlite3';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import type { CharacterRepository, ModelProfileRepository, StoredModelProfile } from '@ailover/application';
+import type {
+  CharacterRepository, ConversationRepository, ModelProfileRepository, StoredChatMessage,
+  StoredConversation, StoredModelProfile,
+} from '@ailover/application';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 
 import { migrate } from './migrations';
-import { characters, modelProfiles, personalityBaselines } from './schema';
+import { characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
 
 const LOCAL_USER_ID = 'local-user';
 
@@ -26,6 +29,7 @@ export function openAppDatabase(path: string): AppDatabase {
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('busy_timeout = 5000');
   migrate(sqlite);
+  sqlite.prepare("UPDATE messages SET status = 'failed' WHERE status = 'streaming'").run();
   sqlite.prepare(`INSERT OR IGNORE INTO users(id, display_name, locale, timezone, created_at)
     VALUES (?, ?, ?, ?, ?)`).run(
     LOCAL_USER_ID, '本地用户', 'zh-CN', 'Asia/Shanghai', new Date().toISOString(),
@@ -107,5 +111,66 @@ export class SqliteModelProfileRepository implements ModelProfileRepository {
   }
 }
 
+export class SqliteConversationRepository implements ConversationRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async findCurrent(characterId: string): Promise<StoredConversation | null> {
+    const row = this.database.orm.select().from(conversations)
+      .where(eq(conversations.characterId, characterId))
+      .orderBy(desc(conversations.lastMessageAt)).limit(1).get();
+    return row ? this.toConversation(row) : null;
+  }
+
+  public async create(conversation: StoredConversation): Promise<void> {
+    this.database.orm.insert(conversations).values({
+      id: conversation.id, userId: LOCAL_USER_ID, characterId: conversation.characterId,
+      title: conversation.title, startedAt: conversation.startedAt.toISOString(),
+      lastMessageAt: conversation.lastMessageAt.toISOString(),
+    }).run();
+  }
+
+  public async listMessages(conversationId: string): Promise<StoredChatMessage[]> {
+    return this.database.orm.select().from(messages).where(eq(messages.conversationId, conversationId))
+      .orderBy(messages.createdAt, messages.id).all().map((row) => this.toMessage(row));
+  }
+
+  public async findMessage(id: string): Promise<StoredChatMessage | null> {
+    const row = this.database.orm.select().from(messages).where(eq(messages.id, id)).limit(1).get();
+    return row ? this.toMessage(row) : null;
+  }
+
+  public async saveMessage(message: StoredChatMessage): Promise<void> {
+    this.database.orm.insert(messages).values({
+      id: message.id, conversationId: message.conversationId, role: message.role,
+      content: message.content, status: message.status, model: message.model,
+      createdAt: message.createdAt.toISOString(),
+    }).run();
+  }
+
+  public async updateMessage(
+    id: string,
+    patch: Pick<StoredChatMessage, 'content' | 'status'> & Partial<Pick<StoredChatMessage, 'model'>>,
+  ): Promise<void> {
+    this.database.orm.update(messages).set(patch).where(eq(messages.id, id)).run();
+  }
+
+  public async touch(conversationId: string, at: Date): Promise<void> {
+    this.database.orm.update(conversations).set({ lastMessageAt: at.toISOString() })
+      .where(eq(conversations.id, conversationId)).run();
+  }
+
+  private toConversation(row: typeof conversations.$inferSelect): StoredConversation {
+    return { id: row.id, characterId: row.characterId, title: row.title,
+      startedAt: new Date(row.startedAt), lastMessageAt: new Date(row.lastMessageAt) };
+  }
+
+  private toMessage(row: typeof messages.$inferSelect): StoredChatMessage {
+    return { id: row.id, conversationId: row.conversationId,
+      role: row.role as StoredChatMessage['role'], content: row.content,
+      status: row.status as StoredChatMessage['status'], model: row.model,
+      createdAt: new Date(row.createdAt) };
+  }
+}
+
 export { migrate } from './migrations';
-export { characters, modelProfiles, personalityBaselines, users } from './schema';
+export { conversations, characters, messages, modelProfiles, personalityBaselines, users } from './schema';

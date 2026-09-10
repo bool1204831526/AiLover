@@ -13,6 +13,22 @@ export type ModelProbeResult = {
 
 export type FetchLike = typeof fetch;
 
+export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+export type ModelChatRequest = ModelProbeRequest & {
+  model: string;
+  messages: ModelChatMessage[];
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+export class ModelGatewayError extends Error {
+  public constructor(message: string, public readonly retryable: boolean) {
+    super(message);
+    this.name = 'ModelGatewayError';
+  }
+}
+
 export async function probeModelProvider(
   request: ModelProbeRequest,
   fetcher: FetchLike = fetch,
@@ -38,6 +54,81 @@ export async function probeModelProvider(
     const message = error instanceof Error && error.name === 'TimeoutError'
       ? '连接超时，请检查服务地址' : '无法连接模型服务';
     return { ok: false, latencyMs: Date.now() - startedAt, models: [], message };
+  }
+}
+
+export async function* streamModelChat(
+  request: ModelChatRequest,
+  fetcher: FetchLike = fetch,
+): AsyncIterable<string> {
+  const base = request.endpoint.replace(/\/+$/, '');
+  const url = request.provider === 'ollama' ? `${base}/api/chat` : `${base}/chat/completions`;
+  const headers = new Headers({ Accept: 'text/event-stream', 'Content-Type': 'application/json' });
+  if (request.provider === 'openai-compatible' && request.apiKey) {
+    headers.set('Authorization', `Bearer ${request.apiKey}`);
+  }
+  const timeoutSignal = AbortSignal.timeout(request.timeoutMs ?? 90_000);
+  const signal = request.signal ? AbortSignal.any([request.signal, timeoutSignal]) : timeoutSignal;
+  const body = request.provider === 'ollama'
+    ? { model: request.model, messages: request.messages, stream: true }
+    : { model: request.model, messages: request.messages, stream: true };
+  let response: Response;
+  try {
+    response = await fetcher(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+  } catch (error) {
+    if (request.signal?.aborted) throw error;
+    if (timeoutSignal.aborted) throw new ModelGatewayError('模型响应超时，请重试。', true);
+    throw new ModelGatewayError('无法连接模型服务，请检查设置后重试。', true);
+  }
+  if (!response.ok) {
+    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+    throw new ModelGatewayError(`模型服务返回 HTTP ${response.status}。`, retryable);
+  }
+  if (!response.body) throw new ModelGatewayError('模型服务没有返回可读取的内容。', true);
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = done ? '' : lines.pop() ?? '';
+      for (const line of lines) {
+        const chunk = parseStreamLine(request.provider, line);
+        if (chunk) yield chunk;
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) {
+      const chunk = parseStreamLine(request.provider, buffer);
+      if (chunk) yield chunk;
+    }
+  } catch (error) {
+    if (request.signal?.aborted) throw error;
+    if (timeoutSignal.aborted) throw new ModelGatewayError('模型响应超时，请重试。', true);
+    throw new ModelGatewayError('模型连接意外中断，请重试。', true);
+  }
+}
+
+function parseStreamLine(provider: ModelProbeRequest['provider'], line: string): string {
+  const trimmed = line.trim();
+  if (!trimmed) return '';
+  const raw = provider === 'openai-compatible' && trimmed.startsWith('data:')
+    ? trimmed.slice(5).trim() : trimmed;
+  if (!raw || raw === '[DONE]') return '';
+  try {
+    const payload = JSON.parse(raw) as {
+      choices?: { delta?: { content?: unknown }; message?: { content?: unknown } }[];
+      message?: { content?: unknown };
+    };
+    const content = provider === 'ollama'
+      ? payload.message?.content
+      : payload.choices?.[0]?.delta?.content ?? payload.choices?.[0]?.message?.content;
+    return typeof content === 'string' ? content : '';
+  } catch {
+    return '';
   }
 }
 

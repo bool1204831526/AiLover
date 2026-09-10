@@ -7,6 +7,10 @@ export const IPC_CHANNELS = {
   modelProfileGet: 'model-profile:get',
   modelProfileSave: 'model-profile:save',
   modelProfileTest: 'model-profile:test',
+  conversationLoad: 'conversation:load',
+  chatSend: 'chat:send',
+  chatCancel: 'chat:cancel',
+  chatStream: 'chat:stream',
 } as const;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
@@ -31,6 +35,54 @@ export const ModelConnectionResultSchema = z.object({
   message: z.string(),
 });
 export type ModelConnectionResult = z.infer<typeof ModelConnectionResultSchema>;
+
+export const ConversationSnapshotSchema = z.object({
+  id: z.string().min(1),
+  characterId: z.string().min(1),
+  title: z.string().min(1),
+  startedAt: z.iso.datetime(),
+  lastMessageAt: z.iso.datetime(),
+});
+export type ConversationSnapshot = z.infer<typeof ConversationSnapshotSchema>;
+
+export const ChatMessageSchema = z.object({
+  id: z.string().min(1),
+  conversationId: z.string().min(1),
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  status: z.enum(['streaming', 'completed', 'failed', 'cancelled']),
+  model: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const ConversationHistorySchema = z.object({
+  conversation: ConversationSnapshotSchema.nullable(),
+  messages: z.array(ChatMessageSchema),
+});
+export type ConversationHistory = z.infer<typeof ConversationHistorySchema>;
+
+export const ChatSendInputSchema = z.object({
+  text: z.string().trim().min(1).max(8000),
+  clientMessageId: z.string().min(1).max(100),
+});
+export type ChatSendInput = z.infer<typeof ChatSendInputSchema>;
+
+export const ChatSendReceiptSchema = z.object({
+  requestId: z.string().min(1),
+  userMessage: ChatMessageSchema,
+  assistantMessage: ChatMessageSchema,
+});
+export type ChatSendReceipt = z.infer<typeof ChatSendReceiptSchema>;
+
+export const ChatStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('chunk'), requestId: z.string(), messageId: z.string(), delta: z.string() }),
+  z.object({ type: z.literal('completed'), requestId: z.string(), message: ChatMessageSchema }),
+  z.object({ type: z.literal('cancelled'), requestId: z.string(), message: ChatMessageSchema }),
+  z.object({ type: z.literal('failed'), requestId: z.string(), message: ChatMessageSchema,
+    error: z.string().min(1), retryable: z.boolean() }),
+]);
+export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
 
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
@@ -100,6 +152,14 @@ export interface AiLoverDesktopApi {
     get(): Promise<ModelProfileSnapshot | null>;
     save(input: ModelProfileInput): Promise<ModelProfileSnapshot>;
     test(input: ModelProfileInput): Promise<ModelConnectionResult>;
+  };
+  conversation: {
+    load(): Promise<ConversationHistory>;
+  };
+  chat: {
+    send(input: ChatSendInput): Promise<ChatSendReceipt>;
+    cancel(requestId: string): Promise<void>;
+    onStream(listener: (event: ChatStreamEvent) => void): () => void;
   };
 }
 

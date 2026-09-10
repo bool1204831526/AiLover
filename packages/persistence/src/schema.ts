@@ -36,3 +36,22 @@ export const modelProfiles = sqliteTable('model_profiles', {
   encryptedApiKey: text('encrypted_api_key'),
   updatedAt: text('updated_at').notNull(),
 });
+
+export const conversations = sqliteTable('conversations', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  title: text('title').notNull(),
+  startedAt: text('started_at').notNull(),
+  lastMessageAt: text('last_message_at').notNull(),
+});
+
+export const messages = sqliteTable('messages', {
+  id: text('id').primaryKey(),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id),
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  status: text('status').notNull(),
+  model: text('model'),
+  createdAt: text('created_at').notNull(),
+});

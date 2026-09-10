@@ -40,6 +40,31 @@ const migrations = [{
       updated_at TEXT NOT NULL
     );
   `,
+}, {
+  version: 3,
+  sql: `
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      title TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      last_message_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS conversations_character_recent
+      ON conversations(character_id, last_message_at DESC);
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY NOT NULL,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('streaming', 'completed', 'failed', 'cancelled')),
+      model TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS messages_conversation_order
+      ON messages(conversation_id, created_at, id);
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

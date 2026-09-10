@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { probeModelProvider } from './index';
+import { probeModelProvider, streamModelChat } from './index';
 
 describe('probeModelProvider', () => {
   it('probes an OpenAI-compatible endpoint without sending prompts', async () => {
@@ -32,5 +32,32 @@ describe('probeModelProvider', () => {
     expect(result.models).toEqual(['qwen3:8b']);
     expect(receivedUrl).toBe('http://127.0.0.1:11434/api/tags');
     expect((receivedOptions?.headers as Headers).has('Authorization')).toBe(false);
+  });
+});
+
+describe('streamModelChat', () => {
+  it('parses OpenAI-compatible SSE chunks split across network reads', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"你'));
+        controller.enqueue(encoder.encode('好"}}]}\n\ndata: [DONE]\n\n'));
+        controller.close();
+      },
+    });
+    const fetcher: typeof fetch = async () => new Response(body, { status: 200 });
+    const chunks: string[] = [];
+    for await (const chunk of streamModelChat({ provider: 'openai-compatible',
+      endpoint: 'https://example.test/v1', model: 'model-a', messages: [] }, fetcher)) chunks.push(chunk);
+    expect(chunks).toEqual(['你好']);
+  });
+
+  it('parses Ollama newline-delimited JSON chunks', async () => {
+    const fetcher: typeof fetch = async () => new Response(
+      '{"message":{"content":"早"}}\n{"message":{"content":"上"},"done":true}\n', { status: 200 });
+    const chunks: string[] = [];
+    for await (const chunk of streamModelChat({ provider: 'ollama', endpoint: 'http://localhost:11434',
+      model: 'qwen', messages: [] }, fetcher)) chunks.push(chunk);
+    expect(chunks.join('')).toBe('早上');
   });
 });

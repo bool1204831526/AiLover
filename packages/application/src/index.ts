@@ -49,3 +49,59 @@ export interface ModelProfileRepository {
   get(): Promise<StoredModelProfile | null>;
   save(profile: StoredModelProfile): Promise<void>;
 }
+
+export type StoredConversation = {
+  id: string;
+  characterId: string;
+  title: string;
+  startedAt: Date;
+  lastMessageAt: Date;
+};
+
+export type StoredChatMessage = {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  status: 'streaming' | 'completed' | 'failed' | 'cancelled';
+  model: string | null;
+  createdAt: Date;
+};
+
+export interface ConversationRepository {
+  findCurrent(characterId: string): Promise<StoredConversation | null>;
+  create(conversation: StoredConversation): Promise<void>;
+  listMessages(conversationId: string): Promise<StoredChatMessage[]>;
+  findMessage(id: string): Promise<StoredChatMessage | null>;
+  saveMessage(message: StoredChatMessage): Promise<void>;
+  updateMessage(id: string, patch: Pick<StoredChatMessage, 'content' | 'status'> &
+    Partial<Pick<StoredChatMessage, 'model'>>): Promise<void>;
+  touch(conversationId: string, at: Date): Promise<void>;
+}
+
+export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+export function assembleChatContext(
+  character: Character,
+  history: StoredChatMessage[],
+  characterBudget = 12_000,
+): ModelChatMessage[] {
+  const system = [
+    `你是${character.name}，${character.identity}。`,
+    `你的背景：${character.background || '暂无额外背景设定'}。`,
+    `你的外貌设定：${character.appearance}。`,
+    `你的说话方式：${character.speakingStyle}。`,
+    '始终保持上述身份，以自然、真诚的中文回复。不要声称自己可以操作现实设备，也不要编造未提供的共同经历。',
+  ].join('\n');
+  const eligible = history.filter((message) => message.status === 'completed' && message.content.trim());
+  const selected: StoredChatMessage[] = [];
+  let used = 0;
+  for (const message of [...eligible].reverse()) {
+    if (selected.length >= 24) break;
+    const size = message.content.length;
+    if (selected.length && used + size > characterBudget) break;
+    selected.push(message);
+    used += size;
+  }
+  return [{ role: 'system', content: system }, ...selected.reverse().map(({ role, content }) => ({ role, content }))];
+}

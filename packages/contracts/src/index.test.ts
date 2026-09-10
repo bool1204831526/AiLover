@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { BootstrapResponseSchema, DomainEventSchema, ModelProfileSnapshotSchema } from './index';
+import {
+  BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
+} from './index';
 
 describe('shared contracts', () => {
   it('accepts a valid bootstrap response', () => {
@@ -35,5 +37,12 @@ describe('shared contracts', () => {
       endpoint: 'https://example.test/v1', model: 'model-a', hasApiKey: true,
       updatedAt: new Date().toISOString(), apiKey: 'must-not-survive' });
     expect(result).not.toHaveProperty('apiKey');
+  });
+
+  it('validates streaming chat events by event type', () => {
+    const event = ChatStreamEventSchema.parse({ type: 'chunk', requestId: 'request-1',
+      messageId: 'message-1', delta: '你好' });
+    expect(event.type === 'chunk' ? event.delta : '').toBe('你好');
+    expect(() => ChatStreamEventSchema.parse({ type: 'failed', requestId: 'request-1' })).toThrow();
   });
 });

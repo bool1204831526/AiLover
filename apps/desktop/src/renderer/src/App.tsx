@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Heart, MessageCircle, Settings, SlidersHorizontal, UserRound, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  Heart, MessageCircle, RotateCcw, SendHorizontal, Settings, SlidersHorizontal, Square, UserRound, X,
+} from 'lucide-react';
 
 import type {
-  BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ModelConnectionResult,
-  ModelProfileInput,
+  BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
+  ModelConnectionResult, ModelProfileInput,
 } from '@ailover/contracts';
 
 const navigation = [
@@ -84,16 +86,110 @@ export function App(): React.JSX.Element {
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
             <SlidersHorizontal aria-hidden="true" size={19} /></button></header>
-        <div className="empty-conversation"><MessageCircle aria-hidden="true" size={30} strokeWidth={1.5} />
-          <p>{error ?? (character ? `${character.name}已经准备好与你相识。聊天能力将在下一阶段接入。` : '创建角色后，即可开始你们的第一段对话。')}</p></div>
-        <div className="composer" aria-label="消息输入区"><textarea aria-label="消息" disabled
-          placeholder={character ? '聊天能力即将接入' : '先创建一位角色'} rows={1} />
-          <button aria-label="发送消息" disabled type="button">发送</button></div>
+        <ChatView character={character} bootstrapError={error} />
       </>}
     </section>
     {creatorOpen && <CharacterCreator draft={draft} saving={saving} error={error} onChange={setDraft}
       onClose={() => setCreatorOpen(false)} onSubmit={submitCharacter} />}
   </main>;
+}
+
+function ChatView({ character, bootstrapError }: {
+  character: CharacterSnapshot | null; bootstrapError: string | null;
+}): React.JSX.Element {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages([]);
+    setChatError(null);
+    if (!character || !window.ailover) return;
+    void window.ailover.conversation.load().then(({ messages: restored }) => setMessages(restored))
+      .catch(() => setChatError('无法读取聊天记录。'));
+  }, [character?.id]);
+
+  useEffect(() => {
+    if (!window.ailover) return;
+    return window.ailover.chat.onStream((event) => handleStreamEvent(event));
+  }, []);
+
+  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [messages]);
+
+  function handleStreamEvent(event: ChatStreamEvent): void {
+    if (event.type === 'chunk') {
+      setMessages((current) => current.map((message) => message.id === event.messageId
+        ? { ...message, content: message.content + event.delta } : message));
+      return;
+    }
+    setMessages((current) => current.map((message) => message.id === event.message.id
+      ? event.message : message));
+    setRequestId(null);
+    if (event.type === 'failed') setChatError(event.error);
+    else if (event.type === 'cancelled') setChatError('已停止生成。');
+  }
+
+  async function sendText(text: string): Promise<void> {
+    const content = text.trim();
+    if (!content || !character || requestId) return;
+    setChatError(null);
+    setDraft('');
+    setRequestId('pending');
+    try {
+      if (!window.ailover) throw new Error('聊天服务不可用');
+      const receipt = await window.ailover.chat.send({ text: content, clientMessageId: crypto.randomUUID() });
+      setMessages((current) => [...current, receipt.userMessage, receipt.assistantMessage]);
+      setRequestId(receipt.requestId);
+    } catch {
+      setDraft(content);
+      setRequestId(null);
+      setChatError('消息未能发送，请检查模型设置后重试。');
+    }
+  }
+
+  function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void sendText(draft);
+    }
+  }
+
+  const retryMessage = (assistantId: string) => {
+    const index = messages.findIndex(({ id }) => id === assistantId);
+    const previous = index > 0 ? messages[index - 1] : undefined;
+    if (previous?.role === 'user') void sendText(previous.content);
+  };
+
+  return <>
+    <div className={messages.length ? 'message-list' : 'empty-conversation'}>
+      {!messages.length ? <><MessageCircle aria-hidden="true" size={30} strokeWidth={1.5} />
+        <p>{bootstrapError ?? chatError ?? (character
+          ? `${character.name}已经准备好。说点什么，开始你们的第一段对话。`
+          : '创建角色后，即可开始你们的第一段对话。')}</p></> : messages.map((message) =>
+        <article className={`message-row ${message.role}`} key={message.id}>
+          <div className={`message-bubble ${message.status}`}>
+            <span className="message-author">{message.role === 'user' ? '你' : character?.name}</span>
+            <p>{message.content || (message.status === 'streaming' ? '正在思考…' : '未能生成回复')}</p>
+            {message.status === 'failed' && <button className="retry-button" type="button"
+              onClick={() => retryMessage(message.id)} title="重新发送上一条消息">
+              <RotateCcw size={13} aria-hidden="true" />重新发送</button>}
+          </div>
+        </article>)}
+      <div ref={endRef} />
+    </div>
+    {messages.length > 0 && chatError && <div className="chat-notice" role="status">{chatError}</div>}
+    <div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
+      disabled={!character} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
+      placeholder={character ? `给${character.name}发消息` : '先创建一位角色'} rows={1} maxLength={8000} />
+      {requestId ? <button aria-label="停止生成" title="停止生成" type="button"
+        onClick={() => requestId !== 'pending' && void window.ailover?.chat.cancel(requestId)}>
+        <Square size={16} fill="currentColor" aria-hidden="true" /></button>
+        : <button aria-label="发送消息" title="发送消息" disabled={!character || !draft.trim()} type="button"
+          onClick={() => void sendText(draft)}><SendHorizontal size={18} aria-hidden="true" /></button>}
+    </div>
+  </>;
 }
 
 function ModelSettings(): React.JSX.Element {

@@ -4,6 +4,10 @@ import {
   BootstrapResponseSchema,
   CharacterDraftSchema,
   CharacterSnapshotSchema,
+  ChatSendInputSchema,
+  ChatSendReceiptSchema,
+  ChatStreamEventSchema,
+  ConversationHistorySchema,
   IPC_CHANNELS,
   ModelConnectionResultSchema,
   ModelProfileInputSchema,
@@ -41,6 +45,29 @@ const api: AiLoverDesktopApi = {
       const input = ModelProfileInputSchema.parse(profile);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.modelProfileTest, input);
       return ModelConnectionResultSchema.parse(result);
+    },
+  },
+  conversation: {
+    load: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.conversationLoad);
+      return ConversationHistorySchema.parse(result);
+    },
+  },
+  chat: {
+    send: async (request) => {
+      const input = ChatSendInputSchema.parse(request);
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.chatSend, input);
+      return ChatSendReceiptSchema.parse(result);
+    },
+    cancel: async (requestId) => {
+      await ipcRenderer.invoke(IPC_CHANNELS.chatCancel, requestId);
+    },
+    onStream: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+        listener(ChatStreamEventSchema.parse(value));
+      };
+      ipcRenderer.on(IPC_CHANNELS.chatStream, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.chatStream, handler);
     },
   },
 };
