@@ -1,0 +1,20 @@
+appId: com.ailover.desktop
+productName: AiLover
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+asar: true
+electronDist: node_modules/electron/dist
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
