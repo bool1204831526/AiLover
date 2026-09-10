@@ -10,6 +10,7 @@ import type {
   StoredConversation, StoredModelProfile,
 } from '@ailover/application';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
+import type { MemoryRepository, MemoryType, StoredMemory } from '@ailover/memory';
 
 import { migrate } from './migrations';
 import { characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
@@ -172,5 +173,136 @@ export class SqliteConversationRepository implements ConversationRepository {
   }
 }
 
+type MemoryRow = {
+  id: string; user_id: string; character_id: string; type: string; subject: string; content: string;
+  normalized_key: string; confidence: number; importance: number; emotional_weight: number;
+  polarity: string; recall_strength: number; reinforcement_count: number; state: string;
+  first_seen_at: string; last_seen_at: string; last_recalled_at: string | null; expires_at: string | null;
+};
+
+export class SqliteMemoryRepository implements MemoryRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async findByKey(characterId: string, normalizedKey: string): Promise<StoredMemory[]> {
+    const rows = this.database.sqlite.prepare(`SELECT * FROM memories
+      WHERE character_id = ? AND normalized_key = ? AND state = 'active'`).all(
+      characterId, normalizedKey,
+    ) as MemoryRow[];
+    return rows.map(toStoredMemory);
+  }
+
+  public async save(memory: StoredMemory, sourceMessageId: string): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare(`INSERT INTO memories(
+        id, user_id, character_id, type, subject, content, normalized_key, confidence, importance,
+        emotional_weight, polarity, recall_strength, reinforcement_count, state, first_seen_at,
+        last_seen_at, last_recalled_at, expires_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        memory.id, memory.userId, memory.characterId, memory.type, memory.subject, memory.content,
+        memory.normalizedKey, memory.confidence, memory.importance, memory.emotionalWeight,
+        memory.polarity, memory.recallStrength, memory.reinforcementCount, memory.state,
+        memory.firstSeenAt.toISOString(), memory.lastSeenAt.toISOString(),
+        memory.lastRecalledAt?.toISOString() ?? null, memory.expiresAt?.toISOString() ?? null,
+      );
+      this.insertSource(memory.id, sourceMessageId, memory.evidence, memory.firstSeenAt);
+    })();
+  }
+
+  public async reinforce(id: string, sourceMessageId: string, evidence: string, at: Date): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      if (!this.insertSource(id, sourceMessageId, evidence, at)) return;
+      this.database.sqlite.prepare(`UPDATE memories SET reinforcement_count = reinforcement_count + 1,
+        recall_strength = MIN(1.0, recall_strength + 0.12), last_seen_at = ? WHERE id = ?`)
+        .run(at.toISOString(), id);
+    })();
+  }
+
+  public async link(fromId: string, toId: string, relation: 'contradicts' | 'supersedes'): Promise<void> {
+    this.database.sqlite.prepare(`INSERT OR IGNORE INTO memory_links(
+      from_memory_id, to_memory_id, relation, created_at) VALUES (?, ?, ?, ?)`)
+      .run(fromId, toId, relation, new Date().toISOString());
+  }
+
+  public async searchCandidates(
+    characterId: string,
+    query: string,
+    types: MemoryType[],
+    now: Date,
+  ): Promise<StoredMemory[]> {
+    const found = new Map<string, MemoryRow>();
+    const base = `character_id = ? AND state = 'active' AND (expires_at IS NULL OR expires_at > ?)`;
+    if (types.length) {
+      const placeholders = types.map(() => '?').join(', ');
+      const rows = this.database.sqlite.prepare(`SELECT * FROM memories WHERE ${base}
+        AND type IN (${placeholders}) ORDER BY importance DESC, last_seen_at DESC LIMIT 60`)
+        .all(characterId, now.toISOString(), ...types) as MemoryRow[];
+      for (const row of rows) found.set(row.id, row);
+    }
+    const ftsQuery = toFtsQuery(query);
+    if (ftsQuery) {
+      const rows = this.database.sqlite.prepare(`SELECT memories.* FROM memories
+        JOIN memories_fts ON memories_fts.memory_id = memories.id
+        WHERE ${base} AND memories_fts MATCH ? LIMIT 60`)
+        .all(characterId, now.toISOString(), ftsQuery) as MemoryRow[];
+      for (const row of rows) found.set(row.id, row);
+    }
+    if (!found.size) {
+      const rows = this.database.sqlite.prepare(`SELECT * FROM memories WHERE ${base}
+        ORDER BY importance DESC, last_seen_at DESC LIMIT 40`)
+        .all(characterId, now.toISOString()) as MemoryRow[];
+      for (const row of rows) found.set(row.id, row);
+    }
+    return [...found.values()].map(toStoredMemory);
+  }
+
+  public async recordRecall(memoryId: string, queryMessageId: string, score: number, at: Date): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare('UPDATE memories SET last_recalled_at = ? WHERE id = ?')
+        .run(at.toISOString(), memoryId);
+      this.database.sqlite.prepare(`INSERT INTO memory_recalls(
+        memory_id, query_message_id, score, recalled_at) VALUES (?, ?, ?, ?)`)
+        .run(memoryId, queryMessageId, score, at.toISOString());
+    })();
+  }
+
+  public async listActive(characterId: string): Promise<StoredMemory[]> {
+    return (this.database.sqlite.prepare(
+      "SELECT * FROM memories WHERE character_id = ? AND state = 'active'",
+    ).all(characterId) as MemoryRow[]).map(toStoredMemory);
+  }
+
+  public async updateStrength(id: string, strength: number, state: StoredMemory['state']): Promise<void> {
+    this.database.sqlite.prepare('UPDATE memories SET recall_strength = ?, state = ? WHERE id = ?')
+      .run(strength, state, id);
+  }
+
+  private insertSource(memoryId: string, messageId: string, evidence: string, at: Date): boolean {
+    const result = this.database.sqlite.prepare(`INSERT OR IGNORE INTO memory_sources(
+      memory_id, message_id, evidence, created_at) VALUES (?, ?, ?, ?)`)
+      .run(memoryId, messageId, evidence, at.toISOString());
+    return result.changes > 0;
+  }
+}
+
+function toStoredMemory(row: MemoryRow): StoredMemory {
+  return { id: row.id, userId: row.user_id, characterId: row.character_id,
+    type: row.type as StoredMemory['type'], subject: row.subject, content: row.content,
+    normalizedKey: row.normalized_key, confidence: row.confidence, importance: row.importance,
+    emotionalWeight: row.emotional_weight, polarity: row.polarity as StoredMemory['polarity'],
+    recallStrength: row.recall_strength, reinforcementCount: row.reinforcement_count,
+    state: row.state as StoredMemory['state'], firstSeenAt: new Date(row.first_seen_at),
+    lastSeenAt: new Date(row.last_seen_at),
+    lastRecalledAt: row.last_recalled_at ? new Date(row.last_recalled_at) : null,
+    expiresAt: row.expires_at ? new Date(row.expires_at) : null, evidence: row.content };
+}
+
+function toFtsQuery(query: string): string {
+  const normalized = query.replace(/[^\p{L}\p{N}]+/gu, '');
+  if (normalized.length < 3) return '';
+  const terms = Array.from({ length: Math.min(normalized.length - 2, 16) },
+    (_, index) => normalized.slice(index, index + 3));
+  return [...new Set(terms)].map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
+}
+
 export { migrate } from './migrations';
-export { conversations, characters, messages, modelProfiles, personalityBaselines, users } from './schema';
+export { conversations, characters, memories, messages, modelProfiles, personalityBaselines, users } from './schema';

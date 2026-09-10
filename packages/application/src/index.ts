@@ -80,11 +80,13 @@ export interface ConversationRepository {
 }
 
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+export type MemoryContextItem = { subject: string; content: string };
 
 export function assembleChatContext(
   character: Character,
   history: StoredChatMessage[],
   characterBudget = 12_000,
+  recalledMemories: MemoryContextItem[] = [],
 ): ModelChatMessage[] {
   const system = [
     `你是${character.name}，${character.identity}。`,
@@ -103,5 +105,9 @@ export function assembleChatContext(
     selected.push(message);
     used += size;
   }
-  return [{ role: 'system', content: system }, ...selected.reverse().map(({ role, content }) => ({ role, content }))];
+  const memoryContext = recalledMemories.length ? [{ role: 'system' as const,
+    content: ['以下是有原始消息证据的相关记忆。只在当前话题确实相关时自然引用，不要逐条复述：',
+      ...recalledMemories.slice(0, 6).map((memory) => `- ${memory.subject}：${memory.content}`)].join('\n') }] : [];
+  return [{ role: 'system', content: system }, ...memoryContext,
+    ...selected.reverse().map(({ role, content }) => ({ role, content }))];
 }

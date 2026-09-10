@@ -27,4 +27,10 @@ describe('assembleChatContext', () => {
     expect(result.at(-1)?.content).toBe('最近内容');
     expect(result.some(({ content }) => content === '较早内容')).toBe(false);
   });
+
+  it('labels recalled memories as evidence-backed context', () => {
+    const result = assembleChatContext(character, [], 100, [{ subject: '饮品偏好', content: '我喜欢咖啡' }]);
+    expect(result[1]?.content).toContain('有原始消息证据');
+    expect(result[1]?.content).toContain('我喜欢咖啡');
+  });
 });

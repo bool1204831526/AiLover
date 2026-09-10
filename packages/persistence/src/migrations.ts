@@ -65,6 +65,69 @@ const migrations = [{
     CREATE INDEX IF NOT EXISTS messages_conversation_order
       ON messages(conversation_id, created_at, id);
   `,
+}, {
+  version: 4,
+  sql: `
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      type TEXT NOT NULL CHECK(type IN ('semantic', 'preference', 'plan', 'episodic', 'relationship')),
+      subject TEXT NOT NULL,
+      content TEXT NOT NULL,
+      normalized_key TEXT NOT NULL,
+      confidence REAL NOT NULL CHECK(confidence BETWEEN 0 AND 1),
+      importance REAL NOT NULL CHECK(importance BETWEEN 0 AND 1),
+      emotional_weight REAL NOT NULL CHECK(emotional_weight BETWEEN 0 AND 1),
+      polarity TEXT NOT NULL CHECK(polarity IN ('positive', 'negative', 'neutral')),
+      recall_strength REAL NOT NULL CHECK(recall_strength BETWEEN 0 AND 1),
+      reinforcement_count INTEGER NOT NULL,
+      state TEXT NOT NULL CHECK(state IN ('active', 'superseded', 'expired')),
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      last_recalled_at TEXT,
+      expires_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS memories_lookup
+      ON memories(character_id, normalized_key, state);
+    CREATE INDEX IF NOT EXISTS memories_rank
+      ON memories(character_id, state, type, importance DESC, last_seen_at DESC);
+    CREATE TABLE IF NOT EXISTS memory_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      message_id TEXT NOT NULL REFERENCES messages(id),
+      evidence TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(memory_id, message_id)
+    );
+    CREATE TABLE IF NOT EXISTS memory_links (
+      from_memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      to_memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      relation TEXT NOT NULL CHECK(relation IN ('contradicts', 'supersedes')),
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(from_memory_id, to_memory_id, relation)
+    );
+    CREATE TABLE IF NOT EXISTS memory_recalls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      query_message_id TEXT NOT NULL REFERENCES messages(id),
+      score REAL NOT NULL,
+      recalled_at TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      memory_id UNINDEXED, subject, content, tokenize='trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS memories_fts_insert AFTER INSERT ON memories BEGIN
+      INSERT INTO memories_fts(memory_id, subject, content) VALUES (new.id, new.subject, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS memories_fts_update AFTER UPDATE OF subject, content ON memories BEGIN
+      DELETE FROM memories_fts WHERE memory_id = old.id;
+      INSERT INTO memories_fts(memory_id, subject, content) VALUES (new.id, new.subject, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS memories_fts_delete AFTER DELETE ON memories BEGIN
+      DELETE FROM memories_fts WHERE memory_id = old.id;
+    END;
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

@@ -11,9 +11,10 @@ import {
 } from '@ailover/contracts';
 import { assembleChatContext, CharacterService, type StoredChatMessage, type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
+import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { ModelGatewayError, probeModelProvider, streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
-import { openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository,
+import { openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteMemoryRepository,
   SqliteModelProfileRepository } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
@@ -43,6 +44,8 @@ const database = openAppDatabase(join(app.getPath('userData'), 'data', 'ailover.
 const characterService = new CharacterService(new SqliteCharacterRepository(database));
 const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
+const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
+  idGenerator: { next: randomUUID } });
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 
@@ -99,7 +102,7 @@ function registerIpcHandlers(): void {
       capabilities: {
         character: true,
         chat: true,
-        memory: false,
+        memory: true,
       },
       currentCharacter: current ? toCharacterSnapshot(current) : null,
     });
@@ -185,7 +188,9 @@ function registerIpcHandlers(): void {
     const requestId = randomUUID();
     const controller = new AbortController();
     activeChats.set(requestId, controller);
-    setImmediate(() => void completeChat(requestId, character, assistantMessage, controller.signal));
+    setImmediate(() => void completeChat(
+      requestId, character, userMessage, assistantMessage, controller.signal,
+    ));
     return ChatSendReceiptSchema.parse({ requestId, userMessage: toChatMessage(userMessage),
       assistantMessage: toChatMessage(assistantMessage) });
   });
@@ -199,6 +204,7 @@ function registerIpcHandlers(): void {
 async function completeChat(
   requestId: string,
   character: Character,
+  userMessage: StoredChatMessage,
   assistantMessage: StoredChatMessage,
   signal: AbortSignal,
 ): Promise<void> {
@@ -207,9 +213,16 @@ async function completeChat(
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
     const history = await conversationRepository.listMessages(assistantMessage.conversationId);
+    let recalled: RecalledMemory[] = [];
+    try {
+      recalled = await memoryService.recall({ characterId: character.id, queryMessageId: userMessage.id,
+        query: userMessage.content, now: userMessage.createdAt });
+    } catch (error) {
+      logger.warn({ error }, 'Memory recall failed; continuing without recalled context');
+    }
     const apiKey = decryptApiKey(profile.encryptedApiKey);
     for await (const delta of streamModelChat({ provider: profile.provider, endpoint: profile.endpoint,
-      model: profile.model, messages: assembleChatContext(character, history), signal,
+      model: profile.model, messages: assembleChatContext(character, history, 12_000, recalled), signal,
       ...(apiKey ? { apiKey } : {}) })) {
       content += delta;
       emitChatEvent({ type: 'chunk', requestId, messageId: assistantMessage.id, delta });
@@ -229,6 +242,12 @@ async function completeChat(
       error: error instanceof ModelGatewayError ? error.message : '生成回复失败，请稍后重试。',
       retryable: error instanceof ModelGatewayError ? error.retryable : true });
   } finally {
+    try {
+      await memoryService.capture({ userId: 'local-user', characterId: character.id,
+        messageId: userMessage.id, text: userMessage.content, now: userMessage.createdAt });
+    } catch (error) {
+      logger.warn({ error }, 'Memory capture failed');
+    }
     activeChats.delete(requestId);
   }
 }
@@ -269,10 +288,15 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
   logger.info({ appVersion: app.getVersion() }, 'AiLover started');
+  const character = await characterService.findCurrent();
+  if (character) {
+    void memoryService.decay(character.id, new Date())
+      .catch((error: unknown) => logger.warn({ error }, 'Memory decay maintenance failed'));
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

@@ -1,4 +1,4 @@
-import { real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -54,4 +54,25 @@ export const messages = sqliteTable('messages', {
   status: text('status').notNull(),
   model: text('model'),
   createdAt: text('created_at').notNull(),
+});
+
+export const memories = sqliteTable('memories', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  type: text('type').notNull(),
+  subject: text('subject').notNull(),
+  content: text('content').notNull(),
+  normalizedKey: text('normalized_key').notNull(),
+  confidence: real('confidence').notNull(),
+  importance: real('importance').notNull(),
+  emotionalWeight: real('emotional_weight').notNull(),
+  polarity: text('polarity').notNull(),
+  recallStrength: real('recall_strength').notNull(),
+  reinforcementCount: integer('reinforcement_count').notNull(),
+  state: text('state').notNull(),
+  firstSeenAt: text('first_seen_at').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+  lastRecalledAt: text('last_recalled_at'),
+  expiresAt: text('expires_at'),
 });

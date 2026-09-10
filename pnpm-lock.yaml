@@ -42,6 +42,9 @@ importers:
       '@ailover/domain':
         specifier: workspace:*
         version: link:packages/domain
+      '@ailover/memory':
+        specifier: workspace:*
+        version: link:packages/memory
       '@ailover/model-gateway':
         specifier: workspace:*
         version: link:packages/model-gateway
@@ -115,6 +118,8 @@ importers:
 
   packages/domain: {}
 
+  packages/memory: {}
+
   packages/model-gateway: {}
 
   packages/observability:
@@ -131,6 +136,9 @@ importers:
       '@ailover/domain':
         specifier: workspace:*
         version: link:../domain
+      '@ailover/memory':
+        specifier: workspace:*
+        version: link:../memory
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.11.1

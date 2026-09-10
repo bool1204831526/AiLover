@@ -6,9 +6,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
+import { MemoryService } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
+  SqliteMemoryRepository,
 } from './index';
 
 const paths: string[] = [];
@@ -81,5 +83,43 @@ describe('SqliteConversationRepository', () => {
     expect((await restored.listMessages('conversation-1')).map(({ content }) => content))
       .toEqual(['你好', '很高兴见到你']);
     second.close();
+  });
+});
+
+describe('SqliteMemoryRepository', () => {
+  it('persists evidence, searches FTS and audits cross-day recall', async () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const database = openAppDatabase(path);
+    const character = createCharacter({
+      name: '艾琳', gender: '女', ageSetting: '成年', identity: 'AI 伴侣', background: '',
+      appearance: '银白色长发', speakingStyle: '温柔', personalityTemplateId: 'gentle',
+    }, { idGenerator: { next: () => 'character-memory' }, clock: { now: () => new Date() } });
+    await new SqliteCharacterRepository(database).save(character);
+    const conversations = new SqliteConversationRepository(database);
+    const firstSeen = new Date('2026-09-01T00:00:00Z');
+    await conversations.create({ id: 'conversation-memory', characterId: character.id,
+      title: '记忆测试', startedAt: firstSeen, lastMessageAt: firstSeen });
+    await conversations.saveMessage({ id: 'source-message', conversationId: 'conversation-memory',
+      role: 'user', content: '我喜欢手冲咖啡', status: 'completed', model: null, createdAt: firstSeen });
+    await conversations.saveMessage({ id: 'query-message', conversationId: 'conversation-memory',
+      role: 'user', content: '手冲咖啡', status: 'completed', model: null,
+      createdAt: new Date('2026-09-11T00:00:00Z') });
+    const service = new MemoryService({ repository: new SqliteMemoryRepository(database),
+      idGenerator: { next: () => 'memory-fts' } });
+    await service.capture({ userId: 'local-user', characterId: character.id,
+      messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
+    await service.capture({ userId: 'local-user', characterId: character.id,
+      messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
+    const recalled = await service.recall({ characterId: character.id, queryMessageId: 'query-message',
+      query: '手冲咖啡', now: new Date('2026-09-11T00:00:00Z') });
+    expect(recalled[0]?.id).toBe('memory-fts');
+    expect(database.sqlite.prepare('SELECT evidence FROM memory_sources').get())
+      .toEqual({ evidence: '我喜欢手冲咖啡' });
+    expect(database.sqlite.prepare('SELECT reinforcement_count FROM memories').get())
+      .toEqual({ reinforcement_count: 1 });
+    expect(database.sqlite.prepare('SELECT query_message_id FROM memory_recalls').get())
+      .toEqual({ query_message_id: 'query-message' });
+    database.close();
   });
 });
