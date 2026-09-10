@@ -27,3 +27,12 @@ export const personalityBaselines = sqliteTable('personality_baselines', {
   maturity: real('maturity').notNull(), rationality: real('rationality').notNull(),
   initiative: real('initiative').notNull(), createdAt: text('created_at').notNull(),
 });
+
+export const modelProfiles = sqliteTable('model_profiles', {
+  id: text('id').primaryKey(),
+  provider: text('provider').notNull(),
+  endpoint: text('endpoint').notNull(),
+  model: text('model').notNull(),
+  encryptedApiKey: text('encrypted_api_key'),
+  updatedAt: text('updated_at').notNull(),
+});

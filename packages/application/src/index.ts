@@ -36,3 +36,16 @@ export class CharacterService {
     return this.repository.findCurrent();
   }
 }
+
+export type StoredModelProfile = {
+  provider: 'openai-compatible' | 'ollama';
+  endpoint: string;
+  model: string;
+  encryptedApiKey: string | null;
+  updatedAt: Date;
+};
+
+export interface ModelProfileRepository {
+  get(): Promise<StoredModelProfile | null>;
+  save(profile: StoredModelProfile): Promise<void>;
+}

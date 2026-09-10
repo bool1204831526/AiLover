@@ -1,24 +1,46 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, IPC_CHANNELS,
+  ModelConnectionResultSchema, ModelProfileInputSchema, ModelProfileSnapshotSchema,
 } from '@ailover/contracts';
 import { CharacterService } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
+import { probeModelProvider } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
-import { openAppDatabase, SqliteCharacterRepository } from '@ailover/persistence';
+import {
+  openAppDatabase, SqliteCharacterRepository, SqliteModelProfileRepository,
+} from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
 
+const isSmokeTest = process.argv.includes('--smoke-test');
+
+if (isSmokeTest && process.env.AILOVER_SMOKE_USER_DATA) {
+  app.setPath('userData', process.env.AILOVER_SMOKE_USER_DATA);
+}
+
+if (isSmokeTest) {
+  process.on('uncaughtException', (error) => {
+    process.stderr.write(`AILOVER_MAIN_ERROR\n${error.stack ?? error.message}\n`);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    const detail = reason instanceof Error ? reason.stack ?? reason.message : String(reason);
+    process.stderr.write(`AILOVER_MAIN_ERROR\n${detail}\n`);
+    process.exit(1);
+  });
+}
+
 const config = loadAppConfig();
 const logger = createLogger({ level: config.logLevel, environment: config.environment });
-const isSmokeTest = process.argv.includes('--smoke-test');
 let smokeTestCompleted = false;
 const database = openAppDatabase(join(app.getPath('userData'), 'data', 'ailover.sqlite'));
 const characterService = new CharacterService(new SqliteCharacterRepository(database));
+const modelProfileRepository = new SqliteModelProfileRepository(database);
 
 function toCharacterSnapshot(character: Character) {
   return CharacterSnapshotSchema.parse({
@@ -26,6 +48,25 @@ function toCharacterSnapshot(character: Character) {
     createdAt: character.createdAt.toISOString(),
     updatedAt: character.updatedAt.toISOString(),
   });
+}
+
+function toModelProfileSnapshot(profile: Awaited<ReturnType<typeof modelProfileRepository.get>>) {
+  if (!profile) return null;
+  return ModelProfileSnapshotSchema.parse({
+    provider: profile.provider, endpoint: profile.endpoint, model: profile.model,
+    hasApiKey: Boolean(profile.encryptedApiKey), updatedAt: profile.updatedAt.toISOString(),
+  });
+}
+
+function encryptApiKey(apiKey: string): string {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable');
+  return safeStorage.encryptString(apiKey).toString('base64');
+}
+
+function decryptApiKey(encrypted: string | null): string | undefined {
+  if (!encrypted) return undefined;
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable');
+  return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
 }
 
 function registerIpcHandlers(): void {
@@ -65,6 +106,30 @@ function registerIpcHandlers(): void {
       clock: { now: () => new Date() },
     });
     return toCharacterSnapshot(await characterService.create(character));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.modelProfileGet, async () =>
+    toModelProfileSnapshot(await modelProfileRepository.get()));
+
+  ipcMain.handle(IPC_CHANNELS.modelProfileSave, async (_event, input: unknown) => {
+    const profile = ModelProfileInputSchema.parse(input);
+    const existing = await modelProfileRepository.get();
+    const encryptedApiKey = profile.provider === 'ollama' ? null
+      : profile.apiKey ? encryptApiKey(profile.apiKey) : existing?.encryptedApiKey ?? null;
+    const stored = { provider: profile.provider, endpoint: profile.endpoint, model: profile.model,
+      encryptedApiKey, updatedAt: new Date() };
+    await modelProfileRepository.save(stored);
+    return toModelProfileSnapshot(stored);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.modelProfileTest, async (_event, input: unknown) => {
+    const profile = ModelProfileInputSchema.parse(input);
+    const saved = await modelProfileRepository.get();
+    const apiKey = profile.apiKey || (saved?.provider === profile.provider
+      ? decryptApiKey(saved.encryptedApiKey) : undefined);
+    const result = await probeModelProvider({ provider: profile.provider, endpoint: profile.endpoint,
+      ...(apiKey ? { apiKey } : {}) });
+    return ModelConnectionResultSchema.parse(result);
   });
 }
 

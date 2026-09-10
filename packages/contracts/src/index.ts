@@ -4,7 +4,33 @@ export const IPC_CHANNELS = {
   appBootstrap: 'app:bootstrap',
   characterCreate: 'character:create',
   characterGetCurrent: 'character:get-current',
+  modelProfileGet: 'model-profile:get',
+  modelProfileSave: 'model-profile:save',
+  modelProfileTest: 'model-profile:test',
 } as const;
+
+export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
+export const ModelProfileInputSchema = z.object({
+  provider: ModelProviderSchema,
+  endpoint: z.url().refine((value) => value.startsWith('http://') || value.startsWith('https://')),
+  model: z.string().trim().min(1).max(200),
+  apiKey: z.string().max(1000).optional(),
+});
+export type ModelProfileInput = z.infer<typeof ModelProfileInputSchema>;
+
+export const ModelProfileSnapshotSchema = ModelProfileInputSchema.omit({ apiKey: true }).extend({
+  hasApiKey: z.boolean(),
+  updatedAt: z.iso.datetime(),
+});
+export type ModelProfileSnapshot = z.infer<typeof ModelProfileSnapshotSchema>;
+
+export const ModelConnectionResultSchema = z.object({
+  ok: z.boolean(),
+  latencyMs: z.number().int().nonnegative(),
+  models: z.array(z.string()),
+  message: z.string(),
+});
+export type ModelConnectionResult = z.infer<typeof ModelConnectionResultSchema>;
 
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
@@ -69,6 +95,11 @@ export interface AiLoverDesktopApi {
   character: {
     create(draft: CharacterDraftInput): Promise<CharacterSnapshot>;
     getCurrent(): Promise<CharacterSnapshot | null>;
+  };
+  modelProfile: {
+    get(): Promise<ModelProfileSnapshot | null>;
+    save(input: ModelProfileInput): Promise<ModelProfileSnapshot>;
+    test(input: ModelProfileInput): Promise<ModelConnectionResult>;
   };
 }
 

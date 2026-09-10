@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BootstrapResponseSchema, DomainEventSchema } from './index';
+import { BootstrapResponseSchema, DomainEventSchema, ModelProfileSnapshotSchema } from './index';
 
 describe('shared contracts', () => {
   it('accepts a valid bootstrap response', () => {
@@ -28,5 +28,12 @@ describe('shared contracts', () => {
         payload: {},
       }),
     ).toThrow();
+  });
+
+  it('never exposes an API key in a saved model profile', () => {
+    const result = ModelProfileSnapshotSchema.parse({ provider: 'openai-compatible',
+      endpoint: 'https://example.test/v1', model: 'model-a', hasApiKey: true,
+      updatedAt: new Date().toISOString(), apiKey: 'must-not-survive' });
+    expect(result).not.toHaveProperty('apiKey');
   });
 });

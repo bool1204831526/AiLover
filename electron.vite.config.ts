@@ -10,6 +10,7 @@ const aliases = {
   '@ailover/contracts': fromRoot('./packages/contracts/src/index.ts'),
   '@ailover/domain': fromRoot('./packages/domain/src/index.ts'),
   '@ailover/application': fromRoot('./packages/application/src/index.ts'),
+  '@ailover/model-gateway': fromRoot('./packages/model-gateway/src/index.ts'),
   '@ailover/observability': fromRoot('./packages/observability/src/index.ts'),
   '@ailover/persistence': fromRoot('./packages/persistence/src/index.ts'),
 };

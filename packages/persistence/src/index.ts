@@ -5,11 +5,11 @@ import Database from 'better-sqlite3';
 import { and, eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import type { CharacterRepository } from '@ailover/application';
+import type { CharacterRepository, ModelProfileRepository, StoredModelProfile } from '@ailover/application';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 
 import { migrate } from './migrations';
-import { characters, personalityBaselines } from './schema';
+import { characters, modelProfiles, personalityBaselines } from './schema';
 
 const LOCAL_USER_ID = 'local-user';
 
@@ -82,5 +82,30 @@ export class SqliteCharacterRepository implements CharacterRepository {
   }
 }
 
+export class SqliteModelProfileRepository implements ModelProfileRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async get(): Promise<StoredModelProfile | null> {
+    const row = this.database.orm.select().from(modelProfiles)
+      .where(eq(modelProfiles.id, 'default-chat')).limit(1).get();
+    return row ? {
+      provider: row.provider as StoredModelProfile['provider'], endpoint: row.endpoint,
+      model: row.model, encryptedApiKey: row.encryptedApiKey, updatedAt: new Date(row.updatedAt),
+    } : null;
+  }
+
+  public async save(profile: StoredModelProfile): Promise<void> {
+    this.database.orm.insert(modelProfiles).values({
+      id: 'default-chat', provider: profile.provider, endpoint: profile.endpoint,
+      model: profile.model, encryptedApiKey: profile.encryptedApiKey,
+      updatedAt: profile.updatedAt.toISOString(),
+    }).onConflictDoUpdate({
+      target: modelProfiles.id,
+      set: { provider: profile.provider, endpoint: profile.endpoint, model: profile.model,
+        encryptedApiKey: profile.encryptedApiKey, updatedAt: profile.updatedAt.toISOString() },
+    }).run();
+  }
+}
+
 export { migrate } from './migrations';
-export { characters, personalityBaselines, users } from './schema';
+export { characters, modelProfiles, personalityBaselines, users } from './schema';

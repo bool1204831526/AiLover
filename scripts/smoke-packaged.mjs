@@ -3,13 +3,18 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const executable = resolve('release/win-unpacked/AiLover.exe');
+const smokeUserData = resolve('release/.smoke-user-data');
 
 if (!existsSync(executable)) {
   throw new Error(`Packaged executable is missing: ${executable}`);
 }
 
 const child = spawn(executable, ['--smoke-test'], {
-  env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
+  env: {
+    ...process.env,
+    AILOVER_SMOKE_USER_DATA: smokeUserData,
+    ELECTRON_ENABLE_LOGGING: '1',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
 });

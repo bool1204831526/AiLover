@@ -28,6 +28,18 @@ const migrations = [{
       initiative REAL NOT NULL CHECK(initiative BETWEEN 0 AND 1), created_at TEXT NOT NULL
     );
   `,
+}, {
+  version: 2,
+  sql: `
+    CREATE TABLE IF NOT EXISTS model_profiles (
+      id TEXT PRIMARY KEY NOT NULL,
+      provider TEXT NOT NULL CHECK(provider IN ('openai-compatible', 'ollama')),
+      endpoint TEXT NOT NULL,
+      model TEXT NOT NULL,
+      encrypted_api_key TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

@@ -517,6 +517,115 @@ button:disabled {
   font-size: 12px;
 }
 
+.settings-page {
+  padding: 28px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: grid;
+  gap: 18px;
+  width: min(100%, 620px);
+}
+
+.settings-heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-heading p {
+  margin: 6px 0 0;
+  color: #77787c;
+  font-size: 12px;
+}
+
+.provider-switch {
+  display: grid;
+  width: min(100%, 420px);
+  padding: 3px;
+  background: #ece9e4;
+  border: 1px solid #dedad4;
+  border-radius: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.provider-switch button {
+  min-height: 36px;
+  color: #66676b;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.provider-switch button.selected {
+  color: #303236;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(32 31 29 / 10%);
+  font-weight: 650;
+}
+
+.settings-section label {
+  display: grid;
+  gap: 7px;
+  color: #4d4f53;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.settings-section label small {
+  color: #898a8d;
+  font-weight: 400;
+}
+
+.settings-section input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  color: #2e3034;
+  background: #fff;
+  border: 1px solid #d9d5cf;
+  border-radius: 6px;
+  outline: 0;
+}
+
+.settings-section input:focus {
+  border-color: #b96572;
+  box-shadow: 0 0 0 3px rgb(185 79 94 / 10%);
+}
+
+.connection-result {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border-left: 3px solid;
+  font-size: 12px;
+}
+
+.connection-result.success {
+  color: #2e6547;
+  background: #edf7f1;
+  border-color: #59a879;
+}
+
+.connection-result.error {
+  color: #8c3844;
+  background: #fff0f1;
+  border-color: #cf6674;
+}
+
+.connection-result span {
+  opacity: 0.82;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 68px minmax(220px, 34%) minmax(390px, 1fr);

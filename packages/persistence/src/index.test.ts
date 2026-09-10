@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
 
-import { openAppDatabase, SqliteCharacterRepository } from './index';
+import { openAppDatabase, SqliteCharacterRepository, SqliteModelProfileRepository } from './index';
 
 const paths: string[] = [];
 afterEach(() => {
@@ -33,5 +33,21 @@ describe('SqliteCharacterRepository', () => {
     expect(restored?.name).toBe('艾琳');
     expect(restored?.personalityBaseline.warmth).toBe(0.9);
     second.close();
+  });
+});
+
+describe('SqliteModelProfileRepository', () => {
+  it('stores only the encrypted credential representation', async () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const database = openAppDatabase(path);
+    const repository = new SqliteModelProfileRepository(database);
+    await repository.save({ provider: 'openai-compatible', endpoint: 'https://example.test/v1',
+      model: 'model-a', encryptedApiKey: 'encrypted-value', updatedAt: new Date('2026-09-11T00:00:00Z') });
+    const restored = await repository.get();
+    expect(restored?.encryptedApiKey).toBe('encrypted-value');
+    expect(database.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
+      .toEqual({ encrypted_api_key: 'encrypted-value' });
+    database.close();
   });
 });
