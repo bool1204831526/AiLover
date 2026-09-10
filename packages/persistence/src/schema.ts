@@ -1,0 +1,29 @@
+import { real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  displayName: text('display_name').notNull(),
+  locale: text('locale').notNull(),
+  timezone: text('timezone').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const characters = sqliteTable('characters', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  name: text('name').notNull(), gender: text('gender').notNull(),
+  ageSetting: text('age_setting').notNull(), identity: text('identity').notNull(),
+  background: text('background').notNull(), appearance: text('appearance').notNull(),
+  speakingStyle: text('speaking_style').notNull(),
+  personalityTemplateId: text('personality_template_id').notNull(),
+  status: text('status').notNull(), createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const personalityBaselines = sqliteTable('personality_baselines', {
+  characterId: text('character_id').primaryKey().references(() => characters.id),
+  warmth: real('warmth').notNull(), energy: real('energy').notNull(),
+  reserve: real('reserve').notNull(), playfulness: real('playfulness').notNull(),
+  maturity: real('maturity').notNull(), rationality: real('rationality').notNull(),
+  initiative: real('initiative').notNull(), createdAt: text('created_at').notNull(),
+});

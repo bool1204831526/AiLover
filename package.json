@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "electron-vite dev --config electron.vite.config.ts",
     "build": "electron-vite build --config electron.vite.config.ts",
-    "package": "pnpm build && electron-builder --win nsis",
+    "package": "pnpm build && electron-builder --win nsis && pnpm rebuild better-sqlite3",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -21,6 +21,8 @@
     "test:packaged": "node scripts/smoke-packaged.mjs"
   },
   "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "drizzle-orm": "^0.44.5",
     "lucide-react": "^0.544.0",
     "pino": "^9.9.4",
     "react": "^19.1.1",
@@ -32,7 +34,9 @@
     "@ailover/contracts": "workspace:*",
     "@ailover/domain": "workspace:*",
     "@ailover/observability": "workspace:*",
+    "@ailover/persistence": "workspace:*",
     "@eslint/js": "^9.35.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.18.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",

@@ -11,6 +11,7 @@ const aliases = {
   '@ailover/domain': fromRoot('./packages/domain/src/index.ts'),
   '@ailover/application': fromRoot('./packages/application/src/index.ts'),
   '@ailover/observability': fromRoot('./packages/observability/src/index.ts'),
+  '@ailover/persistence': fromRoot('./packages/persistence/src/index.ts'),
 };
 
 const workspacePackages = Object.keys(aliases);

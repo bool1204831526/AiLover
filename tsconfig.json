@@ -19,7 +19,8 @@
       "@ailover/contracts": ["packages/contracts/src/index.ts"],
       "@ailover/domain": ["packages/domain/src/index.ts"],
       "@ailover/application": ["packages/application/src/index.ts"],
-      "@ailover/observability": ["packages/observability/src/index.ts"]
+      "@ailover/observability": ["packages/observability/src/index.ts"],
+      "@ailover/persistence": ["packages/persistence/src/index.ts"]
     }
   },
   "include": [

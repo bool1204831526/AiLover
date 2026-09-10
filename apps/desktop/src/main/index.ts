@@ -1,9 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 
-import { BootstrapResponseSchema, IPC_CHANNELS } from '@ailover/contracts';
+import {
+  BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, IPC_CHANNELS,
+} from '@ailover/contracts';
+import { CharacterService } from '@ailover/application';
+import { createCharacter, type Character } from '@ailover/domain';
 import { createLogger } from '@ailover/observability';
+import { openAppDatabase, SqliteCharacterRepository } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
 
@@ -11,19 +17,31 @@ const config = loadAppConfig();
 const logger = createLogger({ level: config.logLevel, environment: config.environment });
 const isSmokeTest = process.argv.includes('--smoke-test');
 let smokeTestCompleted = false;
+const database = openAppDatabase(join(app.getPath('userData'), 'data', 'ailover.sqlite'));
+const characterService = new CharacterService(new SqliteCharacterRepository(database));
+
+function toCharacterSnapshot(character: Character) {
+  return CharacterSnapshotSchema.parse({
+    ...character,
+    createdAt: character.createdAt.toISOString(),
+    updatedAt: character.updatedAt.toISOString(),
+  });
+}
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.appBootstrap, () => {
+  ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
+    const current = await characterService.findCurrent();
     const response = BootstrapResponseSchema.parse({
       appVersion: app.getVersion(),
       platform: process.platform,
       environment: config.environment,
       dataPath: app.getPath('userData'),
       capabilities: {
-        character: false,
+        character: true,
         chat: false,
         memory: false,
       },
+      currentCharacter: current ? toCharacterSnapshot(current) : null,
     });
 
     if (isSmokeTest && !smokeTestCompleted) {
@@ -33,6 +51,20 @@ function registerIpcHandlers(): void {
     }
 
     return response;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.characterGetCurrent, async () => {
+    const current = await characterService.findCurrent();
+    return current ? toCharacterSnapshot(current) : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.characterCreate, async (_event, input: unknown) => {
+    const draft = CharacterDraftSchema.parse(input);
+    const character = createCharacter(draft, {
+      idGenerator: { next: randomUUID },
+      clock: { now: () => new Date() },
+    });
+    return toCharacterSnapshot(await characterService.create(character));
   });
 }
 
@@ -83,3 +115,5 @@ void app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('before-quit', () => database.close());

@@ -10,6 +10,7 @@ describe('shared contracts', () => {
       environment: 'test',
       dataPath: 'C:\\AiLoverData',
       capabilities: { character: false, chat: false, memory: false },
+      currentCharacter: null,
     });
 
     expect(result.platform).toBe('win32');
