@@ -9,10 +9,12 @@ import { loadAppConfig } from './config';
 
 const config = loadAppConfig();
 const logger = createLogger({ level: config.logLevel, environment: config.environment });
+const isSmokeTest = process.argv.includes('--smoke-test');
+let smokeTestCompleted = false;
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.appBootstrap, () =>
-    BootstrapResponseSchema.parse({
+  ipcMain.handle(IPC_CHANNELS.appBootstrap, () => {
+    const response = BootstrapResponseSchema.parse({
       appVersion: app.getVersion(),
       platform: process.platform,
       environment: config.environment,
@@ -22,8 +24,16 @@ function registerIpcHandlers(): void {
         chat: false,
         memory: false,
       },
-    }),
-  );
+    });
+
+    if (isSmokeTest && !smokeTestCompleted) {
+      smokeTestCompleted = true;
+      process.stdout.write('AILOVER_SMOKE_READY\n');
+      setTimeout(() => app.quit(), 50);
+    }
+
+    return response;
+  });
 }
 
 function createMainWindow(): BrowserWindow {
@@ -37,7 +47,7 @@ function createMainWindow(): BrowserWindow {
     title: 'AiLover',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

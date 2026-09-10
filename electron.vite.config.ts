@@ -13,9 +13,12 @@ const aliases = {
   '@ailover/observability': fromRoot('./packages/observability/src/index.ts'),
 };
 
+const workspacePackages = Object.keys(aliases);
+const preloadBundledDependencies = [...workspacePackages, 'zod'];
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: workspacePackages })],
     resolve: { alias: aliases },
     build: {
       rollupOptions: {
@@ -24,11 +27,15 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: preloadBundledDependencies })],
     resolve: { alias: aliases },
     build: {
       rollupOptions: {
         input: fromRoot('./apps/desktop/src/preload/index.ts'),
+        output: {
+          format: 'cjs',
+          entryFileNames: 'index.cjs',
+        },
       },
     },
   },

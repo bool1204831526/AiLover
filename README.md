@@ -21,6 +21,7 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm package
+pnpm test:packaged
 ```
 
 See [the development plan](docs/DEVELOPMENT_PLAN.md) and [architecture decisions](docs/adr/) for scope and module boundaries.

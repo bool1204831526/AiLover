@@ -11,18 +11,6 @@ importers:
 
   .:
     dependencies:
-      '@ailover/application':
-        specifier: workspace:*
-        version: link:packages/application
-      '@ailover/contracts':
-        specifier: workspace:*
-        version: link:packages/contracts
-      '@ailover/domain':
-        specifier: workspace:*
-        version: link:packages/domain
-      '@ailover/observability':
-        specifier: workspace:*
-        version: link:packages/observability
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.2.8)
@@ -39,6 +27,18 @@ importers:
         specifier: ^4.1.5
         version: 4.5.4
     devDependencies:
+      '@ailover/application':
+        specifier: workspace:*
+        version: link:packages/application
+      '@ailover/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@ailover/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@ailover/observability':
+        specifier: workspace:*
+        version: link:packages/observability
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.39.5
