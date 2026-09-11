@@ -12,6 +12,9 @@ export const IPC_CHANNELS = {
   chatCancel: 'chat:cancel',
   chatStream: 'chat:stream',
   relationshipGetSummary: 'relationship:get-summary',
+  characterVisualGet: 'character-visual:get',
+  characterAssetImport: 'character-asset:import',
+  imageCapabilitiesGet: 'image-capabilities:get',
 } as const;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
@@ -93,6 +96,38 @@ export const RelationshipSummarySchema = z.object({
 });
 export type RelationshipSummary = z.infer<typeof RelationshipSummarySchema>;
 
+export const ImageCapabilitiesSchema = z.object({
+  analysis: z.boolean(),
+  generation: z.boolean(),
+  provider: z.string().nullable(),
+  reason: z.string().min(1),
+});
+export type ImageCapabilities = z.infer<typeof ImageCapabilitiesSchema>;
+
+export const CharacterAssetSchema = z.object({
+  id: z.string().min(1),
+  characterId: z.string().min(1),
+  type: z.literal('portrait'),
+  source: z.enum(['imported', 'generated']),
+  version: z.number().int().positive(),
+  mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+  checksum: z.string().regex(/^[a-f0-9]{64}$/),
+  fileName: z.string().min(1),
+  dataUrl: z.string().startsWith('data:image/'),
+  createdAt: z.iso.datetime(),
+});
+export type CharacterAsset = z.infer<typeof CharacterAssetSchema>;
+
+export const CharacterVisualProfileSchema = z.object({
+  characterId: z.string().min(1),
+  identityDescription: z.string().min(1),
+  generationPrompt: z.string().min(1),
+  negativePrompt: z.string().min(1),
+  currentAsset: CharacterAssetSchema.nullable(),
+  updatedAt: z.iso.datetime(),
+});
+export type CharacterVisualProfile = z.infer<typeof CharacterVisualProfileSchema>;
+
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
 ]);
@@ -172,6 +207,11 @@ export interface AiLoverDesktopApi {
   };
   relationship: {
     getSummary(): Promise<RelationshipSummary | null>;
+  };
+  visuals: {
+    get(): Promise<CharacterVisualProfile | null>;
+    importPortrait(): Promise<CharacterVisualProfile | null>;
+    getCapabilities(): Promise<ImageCapabilities>;
   };
 }
 

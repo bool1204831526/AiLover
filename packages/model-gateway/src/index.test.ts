@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { probeModelProvider, streamModelChat } from './index';
+import { inferImageCapabilities, probeModelProvider, streamModelChat } from './index';
+
+describe('inferImageCapabilities', () => {
+  it('detects image abilities independently from chat connectivity', () => {
+    expect(inferImageCapabilities('openai-compatible', ['gpt-4.1-mini', 'gpt-image-1']))
+      .toMatchObject({ analysis: true, generation: true });
+    expect(inferImageCapabilities('ollama', ['qwen3:8b']))
+      .toMatchObject({ analysis: false, generation: false });
+  });
+});
 
 describe('probeModelProvider', () => {
   it('probes an OpenAI-compatible endpoint without sending prompts', async () => {

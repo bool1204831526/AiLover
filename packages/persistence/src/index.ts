@@ -115,6 +115,62 @@ export class SqliteModelProfileRepository implements ModelProfileRepository {
   }
 }
 
+export type StoredCharacterAsset = {
+  id: string; characterId: string; type: 'portrait'; source: 'imported' | 'generated';
+  version: number; localPath: string; mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  checksum: string; fileName: string; metadata: Record<string, unknown>; createdAt: Date;
+};
+
+export type StoredVisualIdentity = {
+  characterId: string; identityDescription: string; generationPrompt: string;
+  negativePrompt: string; updatedAt: Date;
+};
+
+export class SqliteVisualAssetRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public getIdentity(characterId: string): StoredVisualIdentity | null {
+    const row = this.database.sqlite.prepare(`SELECT * FROM character_visual_identities
+      WHERE character_id = ?`).get(characterId) as Record<string, string> | undefined;
+    return row ? { characterId: row.character_id!, identityDescription: row.identity_description!,
+      generationPrompt: row.generation_prompt!, negativePrompt: row.negative_prompt!,
+      updatedAt: new Date(row.updated_at!) } : null;
+  }
+
+  public saveIdentity(identity: StoredVisualIdentity): void {
+    this.database.sqlite.prepare(`INSERT INTO character_visual_identities(character_id,
+      identity_description, generation_prompt, negative_prompt, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(character_id) DO UPDATE SET identity_description = excluded.identity_description,
+      generation_prompt = excluded.generation_prompt, negative_prompt = excluded.negative_prompt,
+      updated_at = excluded.updated_at`).run(identity.characterId, identity.identityDescription,
+      identity.generationPrompt, identity.negativePrompt, identity.updatedAt.toISOString());
+  }
+
+  public getCurrentAsset(characterId: string): StoredCharacterAsset | null {
+    const row = this.database.sqlite.prepare(`SELECT * FROM assets WHERE character_id = ?
+      AND type = 'portrait' ORDER BY version DESC LIMIT 1`).get(characterId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return { id: String(row.id), characterId: String(row.character_id), type: 'portrait',
+      source: row.source as StoredCharacterAsset['source'], version: Number(row.version),
+      localPath: String(row.local_path), mimeType: row.mime_type as StoredCharacterAsset['mimeType'],
+      checksum: String(row.checksum), fileName: String(row.file_name),
+      metadata: JSON.parse(String(row.metadata)) as Record<string, unknown>,
+      createdAt: new Date(String(row.created_at)) };
+  }
+
+  public saveAsset(asset: Omit<StoredCharacterAsset, 'version'>): StoredCharacterAsset {
+    const result = this.database.sqlite.prepare(`SELECT COALESCE(MAX(version), 0) + 1 AS version
+      FROM assets WHERE character_id = ? AND type = ?`).get(asset.characterId, asset.type) as { version: number };
+    const stored = { ...asset, version: result.version };
+    this.database.sqlite.prepare(`INSERT INTO assets(id, character_id, type, source, version,
+      local_path, mime_type, checksum, file_name, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(stored.id, stored.characterId, stored.type,
+      stored.source, stored.version, stored.localPath, stored.mimeType, stored.checksum,
+      stored.fileName, JSON.stringify(stored.metadata), stored.createdAt.toISOString());
+    return stored;
+  }
+}
+
 export class SqliteConversationRepository implements ConversationRepository {
   public constructor(private readonly database: AppDatabase) {}
 
@@ -385,5 +441,6 @@ function toFtsQuery(query: string): string {
 }
 
 export { migrate } from './migrations';
-export { characters, conversations, emotionStates, memories, messages, modelProfiles,
-  personalityBaselines, personalityStates, reflections, relationshipStates, users } from './schema';
+export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories,
+  messages, modelProfiles, personalityBaselines, personalityStates, reflections,
+  relationshipStates, users } from './schema';

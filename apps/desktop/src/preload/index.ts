@@ -13,6 +13,8 @@ import {
   ModelProfileInputSchema,
   ModelProfileSnapshotSchema,
   RelationshipSummarySchema,
+  CharacterVisualProfileSchema,
+  ImageCapabilitiesSchema,
   type AiLoverDesktopApi,
 } from '@ailover/contracts';
 
@@ -75,6 +77,20 @@ const api: AiLoverDesktopApi = {
     getSummary: async () => {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.relationshipGetSummary);
       return result === null ? null : RelationshipSummarySchema.parse(result);
+    },
+  },
+  visuals: {
+    get: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterVisualGet);
+      return result === null ? null : CharacterVisualProfileSchema.parse(result);
+    },
+    importPortrait: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterAssetImport);
+      return result === null ? null : CharacterVisualProfileSchema.parse(result);
+    },
+    getCapabilities: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.imageCapabilitiesGet);
+      return ImageCapabilitiesSchema.parse(result);
     },
   },
 };

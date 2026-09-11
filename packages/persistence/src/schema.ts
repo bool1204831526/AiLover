@@ -114,3 +114,21 @@ export const reflections = sqliteTable('reflections', {
   summary: text('summary').notNull(), importance: real('importance').notNull(),
   ruleVersion: text('rule_version').notNull(), createdAt: text('created_at').notNull(),
 });
+
+export const characterVisualIdentities = sqliteTable('character_visual_identities', {
+  characterId: text('character_id').primaryKey().references(() => characters.id),
+  identityDescription: text('identity_description').notNull(),
+  generationPrompt: text('generation_prompt').notNull(),
+  negativePrompt: text('negative_prompt').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const assets = sqliteTable('assets', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  type: text('type').notNull(), source: text('source').notNull(),
+  version: integer('version').notNull(), localPath: text('local_path').notNull(),
+  mimeType: text('mime_type').notNull(), checksum: text('checksum').notNull(),
+  fileName: text('file_name').notNull(), metadata: text('metadata').notNull(),
+  createdAt: text('created_at').notNull(),
+});

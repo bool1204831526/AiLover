@@ -1,23 +1,28 @@
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { basename, extname, join, resolve, sep } from 'node:path';
 
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
-  ModelProfileSnapshotSchema, RelationshipSummarySchema, type ChatStreamEvent,
+  ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
+  ImageCapabilitiesSchema, type ChatStreamEvent,
 } from '@ailover/contracts';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
   relationshipSummary } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, type StoredChatMessage, type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { MemoryService, type RecalledMemory } from '@ailover/memory';
-import { ModelGatewayError, probeModelProvider, streamModelChat } from '@ailover/model-gateway';
+import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
+  streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
 import { openAppDatabase, SqliteCharacterRepository, SqliteCognitionRepository,
   SqliteConversationRepository, SqliteMemoryRepository, SqliteModelProfileRepository } from '@ailover/persistence';
+import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
 
@@ -50,6 +55,8 @@ const memoryService = new MemoryService({ repository: new SqliteMemoryRepository
   idGenerator: { next: randomUUID } });
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
   { next: randomUUID });
+const visualAssetRepository = new SqliteVisualAssetRepository(database);
+const assetRoot = join(app.getPath('userData'), 'assets');
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 
@@ -95,6 +102,36 @@ function decryptApiKey(encrypted: string | null): string | undefined {
   return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
 }
 
+function ensureVisualIdentity(character: Character) {
+  const existing = visualAssetRepository.getIdentity(character.id);
+  if (existing) return existing;
+  const now = new Date();
+  const identity = {
+    characterId: character.id,
+    identityDescription: `${character.name}，${character.ageSetting}${character.gender}，${character.identity}。${character.appearance}`,
+    generationPrompt: `角色肖像，${character.name}，${character.ageSetting}${character.gender}，${character.appearance}，自然神态，清晰面部，统一角色设计`,
+    negativePrompt: '文字，水印，标志，模糊，低清晰度，多余肢体，面部畸变',
+    updatedAt: now,
+  };
+  visualAssetRepository.saveIdentity(identity);
+  return identity;
+}
+
+async function toVisualProfile(character: Character) {
+  const identity = ensureVisualIdentity(character);
+  const asset = visualAssetRepository.getCurrentAsset(character.id);
+  let currentAsset = null;
+  if (asset) {
+    const absolutePath = resolve(asset.localPath);
+    const root = resolve(assetRoot) + sep;
+    if (!absolutePath.startsWith(root)) throw new Error('Asset path is outside the application data directory');
+    const data = await readFile(absolutePath);
+    currentAsset = { ...asset, dataUrl: `data:${asset.mimeType};base64,${data.toString('base64')}`,
+      createdAt: asset.createdAt.toISOString() };
+  }
+  return CharacterVisualProfileSchema.parse({ ...identity, updatedAt: identity.updatedAt.toISOString(), currentAsset });
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
     const current = await characterService.findCurrent();
@@ -131,7 +168,9 @@ function registerIpcHandlers(): void {
       idGenerator: { next: randomUUID },
       clock: { now: () => new Date() },
     });
-    return toCharacterSnapshot(await characterService.create(character));
+    const created = await characterService.create(character);
+    ensureVisualIdentity(created);
+    return toCharacterSnapshot(created);
   });
 
   ipcMain.handle(IPC_CHANNELS.modelProfileGet, async () =>
@@ -212,6 +251,52 @@ function registerIpcHandlers(): void {
     );
     const summary = relationshipSummary(state);
     return RelationshipSummarySchema.parse({ ...summary, updatedAt: summary.updatedAt.toISOString() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.characterVisualGet, async () => {
+    const character = await characterService.findCurrent();
+    return character ? toVisualProfile(character) : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.characterAssetImport, async () => {
+    const character = await characterService.findCurrent();
+    if (!character || !mainWindow) return null;
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: `为${character.name}选择角色图`, properties: ['openFile'],
+      filters: [{ name: '角色图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    });
+    const sourcePath = selection.filePaths[0];
+    if (selection.canceled || !sourcePath) return toVisualProfile(character);
+    const extension = extname(sourcePath).toLowerCase();
+    const mimeTypes: Record<string, StoredCharacterAsset['mimeType']> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+    };
+    const mimeType = mimeTypes[extension];
+    if (!mimeType || nativeImage.createFromPath(sourcePath).isEmpty()) throw new Error('请选择有效的 PNG、JPEG 或 WebP 图片。');
+    if ((await stat(sourcePath)).size > 15 * 1024 * 1024) throw new Error('图片不能超过 15 MB。');
+    const characterDirectory = join(assetRoot, character.id);
+    await mkdir(characterDirectory, { recursive: true });
+    const id = randomUUID();
+    const destination = join(characterDirectory, `${id}${extension === '.jpeg' ? '.jpg' : extension}`);
+    await copyFile(sourcePath, destination);
+    const checksum = createHash('sha256').update(await readFile(destination)).digest('hex');
+    visualAssetRepository.saveAsset({ id, characterId: character.id, type: 'portrait',
+      source: 'imported', localPath: destination, mimeType, checksum,
+      fileName: basename(sourcePath), metadata: {}, createdAt: new Date() });
+    return toVisualProfile(character);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.imageCapabilitiesGet, async () => {
+    const profile = await modelProfileRepository.get();
+    if (!profile) return ImageCapabilitiesSchema.parse({ analysis: false, generation: false,
+      provider: null, reason: '尚未配置模型服务，可继续使用本地导入' });
+    const apiKey = decryptApiKey(profile.encryptedApiKey);
+    const result = await probeModelProvider({ provider: profile.provider, endpoint: profile.endpoint,
+      ...(apiKey ? { apiKey } : {}) });
+    return ImageCapabilitiesSchema.parse(result.ok
+      ? inferImageCapabilities(profile.provider, result.models)
+      : { analysis: false, generation: false, provider: profile.provider,
+        reason: '图片能力探测失败，不影响聊天和本地图片导入' });
   });
 }
 

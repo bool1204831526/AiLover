@@ -399,6 +399,24 @@ button:disabled {
   font-weight: 650;
 }
 
+.portrait-image {
+  width: min(100%, 290px);
+  aspect-ratio: 3 / 4;
+  margin: 0 auto 20px;
+  overflow: hidden;
+  background: #d8d4ce;
+  border: 1px solid rgb(60 61 64 / 14%);
+  border-radius: 6px;
+  box-shadow: 0 18px 46px rgb(52 49 44 / 14%);
+}
+
+.portrait-image img,
+.visual-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .profile-kicker {
   color: #8a666b;
   font-size: 11px;
@@ -627,6 +645,87 @@ button:disabled {
   overflow-y: auto;
 }
 
+.character-page {
+  min-height: 0;
+  padding: 26px 28px;
+  overflow-y: auto;
+}
+
+.visual-asset-section {
+  display: grid;
+  width: min(100%, 680px);
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.visual-preview {
+  display: grid;
+  width: 180px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  place-items: center;
+  color: #85868a;
+  background: #ece9e4;
+  border: 1px solid #d9d5cf;
+  border-radius: 6px;
+}
+
+.visual-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  font-size: 12px;
+}
+
+.visual-actions h3 {
+  margin: 4px 0 8px;
+  font-size: 18px;
+}
+
+.visual-actions > p,
+.visual-identity-section > p {
+  margin: 0 0 12px;
+  color: #66686c;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.visual-actions > small,
+.visual-identity-section > small {
+  display: block;
+  color: #939195;
+  font-size: 10px;
+}
+
+.import-action {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.visual-identity-section {
+  width: min(100%, 680px);
+  margin-top: 28px;
+  padding: 18px 0;
+  border-top: 1px solid #e1ddd7;
+}
+
+.visual-identity-section > p {
+  margin-top: 7px;
+}
+
+.capability-note {
+  margin-top: 14px;
+  padding: 11px 13px;
+  color: #625d5f;
+  background: #f0ece9;
+  border-left: 3px solid #b9767f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .relationship-empty {
   display: grid;
   min-height: 100%;
@@ -819,5 +918,9 @@ button:disabled {
 
   .modal-backdrop {
     padding: 12px;
+  }
+
+  .visual-asset-section {
+    grid-template-columns: 1fr;
   }
 }

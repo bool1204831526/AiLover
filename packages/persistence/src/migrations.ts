@@ -193,6 +193,33 @@ const migrations = [{
     CREATE INDEX IF NOT EXISTS reflections_character_recent
       ON reflections(character_id, created_at DESC);
   `,
+}, {
+  version: 6,
+  sql: `
+    CREATE TABLE IF NOT EXISTS character_visual_identities (
+      character_id TEXT PRIMARY KEY NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      identity_description TEXT NOT NULL,
+      generation_prompt TEXT NOT NULL,
+      negative_prompt TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('portrait')),
+      source TEXT NOT NULL CHECK(source IN ('imported', 'generated')),
+      version INTEGER NOT NULL CHECK(version > 0),
+      local_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png', 'image/jpeg', 'image/webp')),
+      checksum TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      metadata TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(character_id, type, version)
+    );
+    CREATE INDEX IF NOT EXISTS assets_character_current
+      ON assets(character_id, type, version DESC);
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

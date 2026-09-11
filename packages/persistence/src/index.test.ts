@@ -11,7 +11,7 @@ import { MemoryService } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
-  SqliteCognitionRepository, SqliteMemoryRepository,
+  SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
 } from './index';
 
 const paths: string[] = [];
@@ -54,6 +54,33 @@ describe('SqliteModelProfileRepository', () => {
     expect(database.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: 'encrypted-value' });
     database.close();
+  });
+});
+
+describe('SqliteVisualAssetRepository', () => {
+  it('versions imported portraits and restores the visual identity', async () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const character = createCharacter({
+      name: '艾琳', gender: '女', ageSetting: '成年', identity: 'AI 伴侣', background: '',
+      appearance: '银白色长发', speakingStyle: '温柔', personalityTemplateId: 'gentle',
+    }, { idGenerator: { next: () => 'character-visual' }, clock: { now: () => new Date() } });
+    const first = openAppDatabase(path);
+    await new SqliteCharacterRepository(first).save(character);
+    const repository = new SqliteVisualAssetRepository(first);
+    repository.saveIdentity({ characterId: character.id, identityDescription: '银白色长发',
+      generationPrompt: '清晰角色肖像', negativePrompt: '模糊', updatedAt: new Date('2026-09-11T00:00:00Z') });
+    const base = { characterId: character.id, type: 'portrait' as const, source: 'imported' as const,
+      localPath: 'portrait.png', mimeType: 'image/png' as const, checksum: 'a'.repeat(64),
+      fileName: 'portrait.png', metadata: {}, createdAt: new Date('2026-09-11T00:00:00Z') };
+    expect(repository.saveAsset({ ...base, id: 'asset-1' }).version).toBe(1);
+    expect(repository.saveAsset({ ...base, id: 'asset-2' }).version).toBe(2);
+    first.close();
+    const second = openAppDatabase(path);
+    const restored = new SqliteVisualAssetRepository(second);
+    expect(restored.getIdentity(character.id)?.generationPrompt).toBe('清晰角色肖像');
+    expect(restored.getCurrentAsset(character.id)?.id).toBe('asset-2');
+    second.close();
   });
 });
 

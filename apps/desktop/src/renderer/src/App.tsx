@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  Heart, MessageCircle, RotateCcw, SendHorizontal, Settings, SlidersHorizontal, Square, UserRound, X,
+  Heart, Image, MessageCircle, RotateCcw, SendHorizontal, Settings, SlidersHorizontal, Square,
+  Upload, UserRound, X,
 } from 'lucide-react';
 
 import type {
   BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
-  ModelConnectionResult, ModelProfileInput, RelationshipSummary,
+  CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
+  RelationshipSummary,
 } from '@ailover/contracts';
 
 const navigation = [
@@ -33,6 +35,7 @@ export function App(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('chat');
+  const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
 
   useEffect(() => {
     const api = window.ailover;
@@ -47,6 +50,12 @@ export function App(): React.JSX.Element {
       setCharacter(result.currentCharacter);
     }).catch(() => setError('应用初始化失败，请重新启动。'));
   }, []);
+
+  useEffect(() => {
+    setVisual(null);
+    if (!character || !window.ailover) return;
+    void window.ailover.visuals.get().then(setVisual).catch(() => setError('角色视觉资料读取失败。'));
+  }, [character?.id]);
 
   async function submitCharacter(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -74,7 +83,7 @@ export function App(): React.JSX.Element {
         <span>{error ? '操作失败' : bootstrap ? '本地服务就绪' : '正在启动'}</span></div>
     </aside>
     <section className="character-panel" aria-label="当前角色">
-      {character ? <CharacterPortrait character={character} /> : <div className="character-placeholder">
+      {character ? <CharacterPortrait character={character} visual={visual} /> : <div className="character-placeholder">
         <div className="portrait-ring"><UserRound aria-hidden="true" size={54} strokeWidth={1.25} /></div>
         <h1>尚未创建角色</h1><p>你的第一位 AI Lover 将出现在这里。</p>
         <button className="primary-action" onClick={() => setCreatorOpen(true)} type="button">创建角色</button>
@@ -82,7 +91,9 @@ export function App(): React.JSX.Element {
     </section>
     <section className="conversation-panel">
       {activeSection === 'settings' ? <ModelSettings /> : activeSection === 'relationship'
-        ? <RelationshipView character={character} /> : <>
+        ? <RelationshipView character={character} /> : activeSection === 'character'
+          ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
+            onCreate={() => setCreatorOpen(true)} /> : <>
         <header className="conversation-header"><div><span className="eyebrow">当前对话</span>
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
@@ -93,6 +104,59 @@ export function App(): React.JSX.Element {
     {creatorOpen && <CharacterCreator draft={draft} saving={saving} error={error} onChange={setDraft}
       onClose={() => setCreatorOpen(false)} onSubmit={submitCharacter} />}
   </main>;
+}
+
+function CharacterView({ character, visual, onVisualChange, onCreate }: {
+  character: CharacterSnapshot | null; visual: CharacterVisualProfile | null;
+  onVisualChange(value: CharacterVisualProfile | null): void; onCreate(): void;
+}): React.JSX.Element {
+  const [capabilities, setCapabilities] = useState<ImageCapabilities | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [assetError, setAssetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!window.ailover) return;
+    void window.ailover.visuals.getCapabilities().then(setCapabilities).catch(() =>
+      setCapabilities({ analysis: false, generation: false, provider: null,
+        reason: '暂时无法探测图片能力，可继续使用本地导入' }));
+  }, []);
+
+  async function importPortrait(): Promise<void> {
+    if (!window.ailover || importing) return;
+    setImporting(true);
+    setAssetError(null);
+    try { onVisualChange(await window.ailover.visuals.importPortrait()); }
+    catch { setAssetError('图片导入失败，请选择 15 MB 以内的 PNG、JPEG 或 WebP 图片。'); }
+    finally { setImporting(false); }
+  }
+
+  return <><header className="conversation-header"><div><span className="eyebrow">角色档案</span>
+    <h2>{character?.name ?? '尚未创建角色'}</h2></div></header>
+    <div className="character-page">{!character ? <div className="relationship-empty">
+      <UserRound size={28} strokeWidth={1.5} aria-hidden="true" />
+      <p>先创建角色，再完善她的视觉身份。</p>
+      <button className="primary-action" type="button" onClick={onCreate}>创建角色</button>
+    </div> : <>
+      <section className="visual-asset-section">
+        <div className="visual-preview">{visual?.currentAsset
+          ? <img src={visual.currentAsset.dataUrl} alt={`${character.name}的角色图`} />
+          : <div className="visual-empty"><Image size={32} strokeWidth={1.4} aria-hidden="true" />
+            <span>尚未设置角色图</span></div>}</div>
+        <div className="visual-actions"><h3>角色视觉</h3>
+          <p>{visual?.identityDescription ?? character.appearance}</p>
+          {visual?.currentAsset && <small>版本 {visual.currentAsset.version} · {visual.currentAsset.fileName}</small>}
+          <button className="secondary-action import-action" type="button" disabled={importing}
+            onClick={() => void importPortrait()}><Upload size={16} aria-hidden="true" />
+            {importing ? '正在导入' : visual?.currentAsset ? '更换角色图' : '导入角色图'}</button>
+          {assetError && <p className="form-error">{assetError}</p>}
+        </div>
+      </section>
+      <section className="visual-identity-section"><span className="profile-kicker">生成一致性描述</span>
+        <p>{visual?.generationPrompt}</p><small>{capabilities?.reason ?? '正在探测图片服务能力…'}</small>
+        {capabilities && !capabilities.generation && <div className="capability-note">
+          当前使用导入模式。图片服务不可用时，聊天功能仍可正常使用。</div>}
+      </section>
+    </>}</div></>;
 }
 
 function RelationshipView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
@@ -293,10 +357,14 @@ function ModelSettings(): React.JSX.Element {
     </section></div></>;
 }
 
-function CharacterPortrait({ character }: { character: CharacterSnapshot }): React.JSX.Element {
+function CharacterPortrait({ character, visual }: {
+  character: CharacterSnapshot; visual: CharacterVisualProfile | null;
+}): React.JSX.Element {
   const template = templates.find(({ id }) => id === character.personalityTemplateId);
   return <div className="character-profile">
-    <div className="portrait-ring portrait-created"><span>{character.name.slice(0, 1)}</span></div>
+    {visual?.currentAsset ? <div className="portrait-image"><img src={visual.currentAsset.dataUrl}
+      alt={`${character.name}的角色图`} /></div>
+      : <div className="portrait-ring portrait-created"><span>{character.name.slice(0, 1)}</span></div>}
     <span className="profile-kicker">你的 AI Lover</span><h1>{character.name}</h1>
     <p className="character-identity">{character.identity}</p>
     <div className="profile-tags"><span>{template?.name}</span><span>{character.gender}</span><span>{character.ageSetting}</span></div>

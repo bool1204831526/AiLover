@@ -11,6 +11,32 @@ export type ModelProbeResult = {
   message: string;
 };
 
+export type ImageCapabilityResult = {
+  analysis: boolean; generation: boolean; provider: string | null; reason: string;
+};
+
+export type ImageInput = { mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; data: Uint8Array };
+export type AppearanceDescription = { description: string; provider: string; model: string };
+export type ImageGenerationRequest = { prompt: string; negativePrompt?: string; reference?: ImageInput };
+export type GeneratedAsset = { mimeType: ImageInput['mimeType']; data: Uint8Array; metadata: Record<string, unknown> };
+
+export interface ImageModel {
+  describe(image: ImageInput): Promise<AppearanceDescription>;
+  generate(request: ImageGenerationRequest): Promise<GeneratedAsset[]>;
+}
+
+export function inferImageCapabilities(
+  provider: ModelProbeRequest['provider'], models: string[],
+): ImageCapabilityResult {
+  const names = models.map((model) => model.toLowerCase());
+  const analysis = names.some((name) => /(vision|vl|llava|gemma3|gpt-4o|gpt-4\.1)/.test(name));
+  const generation = provider === 'openai-compatible'
+    && names.some((name) => /(gpt-image|dall-e|flux|stable.?diffusion|(^|\/)sd[xl-])/.test(name));
+  const available = [analysis ? '参考图分析' : '', generation ? '图片生成' : ''].filter(Boolean).join('和');
+  return { analysis, generation, provider,
+    reason: available ? `检测到${available}能力` : '当前模型服务未检测到图片能力，可继续使用本地导入' };
+}
+
 export type FetchLike = typeof fetch;
 
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
