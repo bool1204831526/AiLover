@@ -285,7 +285,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     if (previous?.role === 'user') void sendText(previous.content);
   };
 
-  return <>
+  return <div className="chat-view">
     <form className="conversation-search" onSubmit={(event) => void searchMessages(event)}>
       <Search size={16} aria-hidden="true" />
       <input aria-label="搜索聊天记录" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)}
@@ -330,7 +330,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
         : <button aria-label="发送消息" title="发送消息" disabled={!character || !modelConfigured || !draft.trim()} type="button"
           onClick={() => void sendText(draft)}><SendHorizontal size={18} aria-hidden="true" /></button>}
     </div>
-  </>;
+  </div>;
 }
 
 function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onComplete }: {
