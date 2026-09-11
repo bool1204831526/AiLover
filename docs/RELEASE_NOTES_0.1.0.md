@@ -24,6 +24,8 @@
 ## Known Limitations
 
 - The MVP supports one active character and one current conversation timeline.
+- Long conversations retain all records in SQLite and backups, while the current chat view loads the
+  latest 500 messages. Browsing or searching older messages is not yet available.
 - Image generation and automatic reference-image analysis are capability interfaces only; portrait
   import is the reliable default path.
 - There is no automatic updater or production code-signing certificate yet.

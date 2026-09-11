@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
 
-import { assembleChatContext, type StoredChatMessage } from './index';
+import { assembleChatContext, MAX_RETAINED_CHAT_MESSAGES, retainRecentMessages,
+  type StoredChatMessage } from './index';
 
 const character = createCharacter({
   name: '艾琳', gender: '女', ageSetting: '成年', identity: '用户的 AI 伴侣', background: '来自海边',
@@ -38,5 +39,15 @@ describe('assembleChatContext', () => {
     const result = assembleChatContext(character, [], 100, [], '心情平稳；正在逐渐熟悉彼此');
     expect(result[1]?.content).toContain('当前连续状态');
     expect(result[1]?.content).not.toContain('0.');
+  });
+});
+
+describe('retainRecentMessages', () => {
+  it('bounds long renderer sessions while preserving chronological order', () => {
+    const messages = Array.from({ length: 2_000 }, (_, index) => index);
+    const retained = retainRecentMessages(messages);
+    expect(retained).toHaveLength(MAX_RETAINED_CHAT_MESSAGES);
+    expect(retained[0]).toBe(1_500);
+    expect(retained.at(-1)).toBe(1_999);
   });
 });

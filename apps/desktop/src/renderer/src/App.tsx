@@ -10,6 +10,7 @@ import type {
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
   RelationshipSummary,
 } from '@ailover/contracts';
+import { retainRecentMessages } from '@ailover/application';
 
 const navigation = [
   { id: 'chat', label: '对话', icon: MessageCircle }, { id: 'character', label: '角色', icon: UserRound },
@@ -250,7 +251,9 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     try {
       if (!window.ailover) throw new Error('聊天服务不可用');
       const receipt = await window.ailover.chat.send({ text: content, clientMessageId: crypto.randomUUID() });
-      setMessages((current) => [...current, receipt.userMessage, receipt.assistantMessage]);
+      setMessages((current) => retainRecentMessages(
+        [...current, receipt.userMessage, receipt.assistantMessage],
+      ));
       setRequestId(receipt.requestId);
     } catch {
       setDraft(content);

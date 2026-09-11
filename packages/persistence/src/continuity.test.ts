@@ -20,6 +20,36 @@ afterEach(() => {
 });
 
 describe('long-term continuity', () => {
+  it('bounds a ten-thousand-message session and loads its recent window promptly', async () => {
+    const path = join(tmpdir(), `ailover-long-session-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const database = openAppDatabase(path);
+    const character = createCharacter({ name: '艾琳', gender: '女', ageSetting: '成年',
+      identity: 'AI 伴侣', background: '', appearance: '银白色长发', speakingStyle: '温柔',
+      personalityTemplateId: 'gentle' }, { idGenerator: { next: () => 'long-character' },
+      clock: { now: () => new Date('2026-09-01T00:00:00Z') } });
+    await new SqliteCharacterRepository(database).save(character);
+    const repository = new SqliteConversationRepository(database);
+    await repository.create({ id: 'long-conversation', characterId: character.id, title: '长期对话',
+      startedAt: new Date('2026-09-01T00:00:00Z'), lastMessageAt: new Date('2026-09-01T00:00:00Z') });
+    const insert = database.sqlite.prepare(`INSERT INTO messages(id, conversation_id, role, content,
+      status, model, created_at) VALUES (?, 'long-conversation', 'user', ?, 'completed', NULL, ?)`);
+    database.sqlite.transaction(() => {
+      for (let index = 0; index < 10_000; index += 1) {
+        insert.run(`message-${index.toString().padStart(5, '0')}`, `消息 ${index}`,
+          new Date(Date.UTC(2026, 8, 1, 0, 0, index)).toISOString());
+      }
+    })();
+    const startedAt = performance.now();
+    const restored = await repository.listMessages('long-conversation');
+    const durationMs = performance.now() - startedAt;
+    expect(restored).toHaveLength(500);
+    expect(restored[0]?.content).toBe('消息 9500');
+    expect(restored.at(-1)?.content).toBe('消息 9999');
+    expect(durationMs).toBeLessThan(1_000);
+    database.close();
+  });
+
   it('restores conversation, evidence-backed memory and cognition after a cross-day restart', async () => {
     const path = join(tmpdir(), `ailover-continuity-${randomUUID()}.sqlite`);
     paths.push(path);
@@ -71,8 +101,9 @@ describe('long-term continuity', () => {
     const path = join(tmpdir(), `ailover-query-plan-${randomUUID()}.sqlite`);
     paths.push(path);
     const database = openAppDatabase(path);
-    const messagePlan = database.sqlite.prepare(`EXPLAIN QUERY PLAN SELECT * FROM messages
-      WHERE conversation_id = ? ORDER BY created_at, id`).all('conversation') as { detail: string }[];
+    const messagePlan = database.sqlite.prepare(`EXPLAIN QUERY PLAN SELECT * FROM (
+      SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, id DESC LIMIT 500
+    ) ORDER BY created_at, id`).all('conversation') as { detail: string }[];
     const memoryPlan = database.sqlite.prepare(`EXPLAIN QUERY PLAN SELECT * FROM memories
       WHERE character_id = ? AND state = 'active' ORDER BY type, importance DESC, last_seen_at DESC`)
       .all('character') as { detail: string }[];

@@ -79,6 +79,12 @@ export interface ConversationRepository {
   touch(conversationId: string, at: Date): Promise<void>;
 }
 
+export const MAX_RETAINED_CHAT_MESSAGES = 500;
+
+export function retainRecentMessages<T>(messages: T[], maximum = MAX_RETAINED_CHAT_MESSAGES): T[] {
+  return messages.length > maximum ? messages.slice(-maximum) : messages;
+}
+
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type MemoryContextItem = { subject: string; content: string };
 

@@ -1,5 +1,7 @@
 # MVP Release Checklist
 
+Run the complete local release gate with `pnpm release:verify`.
+
 ## Automated Gates
 
 - [x] TypeScript strict typecheck
@@ -20,7 +22,7 @@
 - [x] Windows 10 unpacked build startup
 - [x] Windows 10 installer install/start/uninstall exercise
 - [x] Windows 10 same-version overwrite upgrade and restart exercise
-- [ ] Extended chat-session memory growth profiling
+- [x] Ten-thousand-message persistence profile with a bounded 500-message retained window
 - [ ] Windows 11 clean-machine install/start/uninstall exercise
 - [ ] Production Authenticode certificate verification
 - [ ] Final branded application icon verification

@@ -9,6 +9,7 @@ import type {
   CharacterRepository, ConversationRepository, ModelProfileRepository, StoredChatMessage,
   StoredConversation, StoredModelProfile,
 } from '@ailover/application';
+import { MAX_RETAINED_CHAT_MESSAGES } from '@ailover/application';
 import type {
   CognitionRepository, CognitionSnapshot, EvolutionEvidence, ReflectionRecord,
 } from '@ailover/cognition';
@@ -243,8 +244,11 @@ export class SqliteConversationRepository implements ConversationRepository {
   }
 
   public async listMessages(conversationId: string): Promise<StoredChatMessage[]> {
-    return this.database.orm.select().from(messages).where(eq(messages.conversationId, conversationId))
-      .orderBy(messages.createdAt, messages.id).all().map((row) => this.toMessage(row));
+    const rows = this.database.sqlite.prepare(`SELECT * FROM (
+      SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+    ) ORDER BY created_at, id`).all(conversationId, MAX_RETAINED_CHAT_MESSAGES) as
+      (typeof messages.$inferSelect)[];
+    return rows.map((row) => this.toMessage(row));
   }
 
   public async findMessage(id: string): Promise<StoredChatMessage | null> {

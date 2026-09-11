@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:packaged": "node scripts/smoke-packaged.mjs"
+    "test:packaged": "node scripts/smoke-packaged.mjs",
+    "release:verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm package && pnpm test:packaged"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
