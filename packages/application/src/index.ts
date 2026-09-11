@@ -82,6 +82,42 @@ export interface ConversationRepository {
 
 export const MAX_RETAINED_CHAT_MESSAGES = 500;
 
+export type CompanionScheduleSettings = {
+  enabled: boolean;
+  intervalMinutes: number;
+  quietStart: string;
+  quietEnd: string;
+};
+
+function minutesSinceMidnight(value: string): number {
+  const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(value);
+  if (!match) throw new Error(`Invalid time value: ${value}`);
+  const [hours, minutes] = value.split(':').map(Number) as [number, number];
+  return hours * 60 + minutes;
+}
+
+export function isCompanionQuietHours(now: Date, settings: CompanionScheduleSettings): boolean {
+  const start = minutesSinceMidnight(settings.quietStart);
+  const end = minutesSinceMidnight(settings.quietEnd);
+  if (start === end) return false;
+  const current = now.getHours() * 60 + now.getMinutes();
+  return start < end ? current >= start && current < end : current >= start || current < end;
+}
+
+export function shouldSendCompanionPrompt(input: {
+  now: Date;
+  lastInteractionAt: Date | null;
+  lastPromptAt: Date | null;
+  settings: CompanionScheduleSettings;
+}): boolean {
+  const { now, lastInteractionAt, lastPromptAt, settings } = input;
+  if (!settings.enabled || !lastInteractionAt || isCompanionQuietHours(now, settings)) return false;
+  const elapsedSinceInteraction = now.getTime() - lastInteractionAt.getTime();
+  const elapsedSincePrompt = lastPromptAt ? now.getTime() - lastPromptAt.getTime() : Infinity;
+  const interval = settings.intervalMinutes * 60_000;
+  return elapsedSinceInteraction >= interval && elapsedSincePrompt >= interval;
+}
+
 export function retainRecentMessages<T>(messages: T[], maximum = MAX_RETAINED_CHAT_MESSAGES): T[] {
   return messages.length > maximum ? messages.slice(-maximum) : messages;
 }
