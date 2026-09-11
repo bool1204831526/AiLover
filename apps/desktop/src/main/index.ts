@@ -12,6 +12,7 @@ import {
   ConversationSnapshotSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
+  DesktopPetPackManifestSchema, DesktopPetPackSchema, type DesktopPetPackManifest,
   type ChatStreamEvent,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
@@ -68,6 +69,7 @@ const cognitionService = new CognitionService(new SqliteCognitionRepository(data
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
 const assetRoot = join(userDataPath, 'assets');
+const recommendedPetActions = ['idle', 'walk-left', 'walk-right', 'greet', 'happy', 'thinking', 'sleep'] as const;
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 let desktopPetWindow: BrowserWindow | null = null;
@@ -149,6 +151,83 @@ async function toVisualProfile(character: Character) {
       createdAt: asset.createdAt.toISOString() };
   }
   return CharacterVisualProfileSchema.parse({ ...identity, updatedAt: identity.updatedAt.toISOString(), currentAsset });
+}
+
+function petPackRoot(characterId: string): string {
+  return join(assetRoot, characterId, 'desktop-pet');
+}
+
+async function readDesktopPetPack(characterId: string) {
+  const root = petPackRoot(characterId);
+  let pointer: { version: number };
+  try { pointer = JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as { version: number }; }
+  catch { return null; }
+  if (!Number.isInteger(pointer.version) || pointer.version < 1) return null;
+  const directory = join(root, String(pointer.version));
+  const manifest = DesktopPetPackManifestSchema.parse(
+    JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')),
+  );
+  const actionDataUrls: Record<string, string> = {};
+  for (const [action, fileName] of Object.entries(manifest.actions)) {
+    if (!fileName) continue;
+    if (basename(fileName) !== fileName) throw new Error('动画清单包含不安全的文件路径。');
+    const extension = extname(fileName).toLowerCase();
+    const mimeType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : null;
+    if (!mimeType) throw new Error('桌宠动作只支持 WebP 或 PNG。');
+    actionDataUrls[action] = `data:${mimeType};base64,${(await readFile(join(directory, fileName))).toString('base64')}`;
+  }
+  const availableActions = Object.keys(manifest.actions);
+  return DesktopPetPackSchema.parse({ version: pointer.version, availableActions,
+    missingRecommended: recommendedPetActions.filter((action) => !availableActions.includes(action)),
+    actionDataUrls, message: `已启用动画包版本 ${pointer.version}` });
+}
+
+async function importDesktopPetPack(character: Character, sourceDirectory: string) {
+  const manifestPath = join(sourceDirectory, 'manifest.json');
+  let manifest: DesktopPetPackManifest;
+  try {
+    if ((await stat(manifestPath)).size > 100 * 1024) throw new Error('manifest.json 不能超过 100 KB。');
+    manifest = DesktopPetPackManifestSchema.parse(JSON.parse(await readFile(manifestPath, 'utf8')));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const actions: Record<string, string> = {};
+    for (const action of recommendedPetActions) {
+      for (const extension of ['.webp', '.png']) {
+        const fileName = `${action}${extension}`;
+        try { if ((await stat(join(sourceDirectory, fileName))).isFile()) { actions[action] = fileName; break; } }
+        catch { /* This optional action file is not present. */ }
+      }
+    }
+    manifest = DesktopPetPackManifestSchema.parse({ version: 1, actions });
+  }
+  const files = Object.values(manifest.actions).filter((fileName): fileName is string => Boolean(fileName));
+  let totalBytes = 0;
+  for (const fileName of files) {
+    if (basename(fileName) !== fileName) throw new Error('动作文件必须直接放在动画包根目录。');
+    if (!['.webp', '.png'].includes(extname(fileName).toLowerCase())) throw new Error('动作文件只支持 WebP 或 PNG。');
+    const source = join(sourceDirectory, fileName);
+    const info = await stat(source);
+    if (!info.isFile() || info.size > 20 * 1024 * 1024) throw new Error(`${fileName} 无效或超过 20 MB。`);
+    if (nativeImage.createFromBuffer(await readFile(source)).isEmpty()) throw new Error(`${fileName} 不是有效图片。`);
+    totalBytes += info.size;
+  }
+  if (totalBytes > 100 * 1024 * 1024) throw new Error('动画包总大小不能超过 100 MB。');
+  const root = petPackRoot(character.id);
+  let currentVersion = 0;
+  try { currentVersion = Number((JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as { version: number }).version) || 0; }
+  catch { /* First imported pack. */ }
+  const version = currentVersion + 1;
+  const destination = join(root, String(version));
+  await mkdir(destination, { recursive: true });
+  try {
+    await writeFile(join(destination, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+    for (const fileName of files) await copyFile(join(sourceDirectory, fileName), join(destination, fileName));
+    await writeFile(join(root, 'current.json'), JSON.stringify({ version }), 'utf8');
+  } catch (error) {
+    await rm(destination, { recursive: true, force: true });
+    throw error;
+  }
+  return readDesktopPetPack(character.id);
 }
 
 function registerIpcHandlers(): void {
@@ -334,6 +413,24 @@ function registerIpcHandlers(): void {
       source: 'imported', localPath: destination, mimeType, checksum,
       fileName: basename(sourcePath), metadata: {}, createdAt: new Date() });
     return toVisualProfile(character);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.desktopPetPackGet, async () => {
+    const character = await characterService.findCurrent();
+    return character ? readDesktopPetPack(character.id) : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.desktopPetPackImport, async () => {
+    const character = await characterService.findCurrent();
+    if (!character || !mainWindow) return null;
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: `为${character.name}选择桌宠动画包`, properties: ['openDirectory'],
+    });
+    const sourceDirectory = selection.filePaths[0];
+    if (selection.canceled || !sourceDirectory) return readDesktopPetPack(character.id);
+    const pack = await importDesktopPetPack(character, sourceDirectory);
+    desktopPetWindow?.webContents.reload();
+    return pack;
   });
 
   ipcMain.handle(IPC_CHANNELS.imageCapabilitiesGet, async () => {

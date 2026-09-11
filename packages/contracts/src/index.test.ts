@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
+  DesktopPetPackManifestSchema,
 } from './index';
 
 describe('shared contracts', () => {
@@ -45,5 +46,12 @@ describe('shared contracts', () => {
       messageId: 'message-1', delta: '你好' });
     expect(event.type === 'chunk' ? event.delta : '').toBe('你好');
     expect(() => ChatStreamEventSchema.parse({ type: 'failed', requestId: 'request-1' })).toThrow();
+  });
+
+  it('requires an idle action in desktop pet animation packs', () => {
+    expect(DesktopPetPackManifestSchema.parse({ version: 1,
+      actions: { idle: 'idle.webp', greet: 'greet.webp' } }).actions.idle).toBe('idle.webp');
+    expect(() => DesktopPetPackManifestSchema.parse({ version: 1,
+      actions: { greet: 'greet.webp' } })).toThrow();
   });
 });

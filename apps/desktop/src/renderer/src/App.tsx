@@ -9,6 +9,7 @@ import type {
   BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
   RelationshipSummary, CompanionSettings,
+  DesktopPetPack,
 } from '@ailover/contracts';
 import { retainRecentMessages } from '@ailover/application';
 
@@ -24,6 +25,7 @@ const templates = [
   { id: 'mature', name: '成熟', description: '沉稳可靠，富有包容力' },
   { id: 'rational', name: '理性', description: '清晰冷静，尊重事实' },
 ] as const;
+const petActionNames = ['idle', 'walk-left', 'walk-right', 'greet', 'happy', 'thinking', 'sleep'] as const;
 const emptyDraft: CharacterDraftInput = {
   name: '', gender: '女', ageSetting: '成年', identity: '你的 AI 伴侣', background: '',
   appearance: '', speakingStyle: '', personalityTemplateId: 'gentle',
@@ -132,13 +134,16 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
   const [capabilities, setCapabilities] = useState<ImageCapabilities | null>(null);
   const [importing, setImporting] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [petPack, setPetPack] = useState<DesktopPetPack | null>(null);
+  const [importingPetPack, setImportingPetPack] = useState(false);
 
   useEffect(() => {
     if (!window.ailover) return;
     void window.ailover.visuals.getCapabilities().then(setCapabilities).catch(() =>
       setCapabilities({ analysis: false, generation: false, provider: null,
         reason: '暂时无法探测图片能力，可继续使用本地导入' }));
-  }, []);
+    void window.ailover.visuals.getDesktopPetPack().then(setPetPack);
+  }, [character?.id]);
 
   async function importPortrait(): Promise<void> {
     if (!window.ailover || importing) return;
@@ -147,6 +152,15 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
     try { onVisualChange(await window.ailover.visuals.importPortrait()); }
     catch { setAssetError('图片导入失败，请选择 15 MB 以内的 PNG、JPEG 或 WebP 图片。'); }
     finally { setImporting(false); }
+  }
+
+  async function importPetPack(): Promise<void> {
+    if (!window.ailover || importingPetPack) return;
+    setImportingPetPack(true);
+    setAssetError(null);
+    try { setPetPack(await window.ailover.visuals.importDesktopPetPack()); }
+    catch (error) { setAssetError(error instanceof Error ? error.message : '动画包导入失败，请检查素材清单。'); }
+    finally { setImportingPetPack(false); }
   }
 
   return <><header className="conversation-header"><div><span className="eyebrow">角色档案</span>
@@ -174,6 +188,18 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
         <p>{visual?.generationPrompt}</p><small>{capabilities?.reason ?? '正在探测图片服务能力…'}</small>
         {capabilities && !capabilities.generation && <div className="capability-note">
           当前使用导入模式。图片服务不可用时，聊天功能仍可正常使用。</div>}
+      </section>
+      <section className="pet-asset-section"><div className="settings-heading"><h3>桌宠动作素材</h3>
+        <p>选择含 manifest.json 的动画包文件夹。动作文件使用透明 WebP 或 PNG，建议 512 x 512。</p></div>
+        <div className="pet-action-requirements">
+          {petActionNames.map((action) =>
+            <span className={petPack?.availableActions.includes(action) ? 'available' : ''} key={action}>
+              {petPack?.availableActions.includes(action) ? <Check size={12} /> : null}{action}</span>)}
+        </div>
+        {petPack && <small>{petPack.message} · 已导入 {petPack.availableActions.length} 个动作</small>}
+        <button className="secondary-action import-action" type="button" disabled={importingPetPack}
+          onClick={() => void importPetPack()}><Upload size={16} aria-hidden="true" />
+          {importingPetPack ? '正在校验' : petPack ? '导入新版本' : '导入动画包'}</button>
       </section>
     </>}</div></>;
 }

@@ -16,6 +16,8 @@ export const IPC_CHANNELS = {
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
+  desktopPetPackGet: 'desktop-pet-pack:get',
+  desktopPetPackImport: 'desktop-pet-pack:import',
   dataExportBackup: 'data:export-backup',
   dataRestoreBackup: 'data:restore-backup',
   dataExportDiagnostics: 'data:export-diagnostics',
@@ -153,6 +155,32 @@ export const CharacterVisualProfileSchema = z.object({
 });
 export type CharacterVisualProfile = z.infer<typeof CharacterVisualProfileSchema>;
 
+export const DesktopPetActionSchema = z.enum([
+  'idle', 'walk-left', 'walk-right', 'greet', 'happy', 'thinking', 'sleep',
+]);
+export const DesktopPetPackManifestSchema = z.object({
+  version: z.literal(1),
+  actions: z.object({
+    idle: z.string().min(1),
+    'walk-left': z.string().min(1).optional(),
+    'walk-right': z.string().min(1).optional(),
+    greet: z.string().min(1).optional(),
+    happy: z.string().min(1).optional(),
+    thinking: z.string().min(1).optional(),
+    sleep: z.string().min(1).optional(),
+  }).strict(),
+}).strict();
+export type DesktopPetPackManifest = z.infer<typeof DesktopPetPackManifestSchema>;
+
+export const DesktopPetPackSchema = z.object({
+  version: z.number().int().positive(),
+  availableActions: z.array(DesktopPetActionSchema),
+  missingRecommended: z.array(DesktopPetActionSchema),
+  actionDataUrls: z.partialRecord(DesktopPetActionSchema, z.string().startsWith('data:image/')),
+  message: z.string().min(1),
+});
+export type DesktopPetPack = z.infer<typeof DesktopPetPackSchema>;
+
 export const DataOperationResultSchema = z.object({
   ok: z.literal(true),
   message: z.string().min(1),
@@ -254,6 +282,8 @@ export interface AiLoverDesktopApi {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;
     getCapabilities(): Promise<ImageCapabilities>;
+    getDesktopPetPack(): Promise<DesktopPetPack | null>;
+    importDesktopPetPack(): Promise<DesktopPetPack | null>;
   };
   data: {
     exportBackup(): Promise<DataOperationResult | null>;

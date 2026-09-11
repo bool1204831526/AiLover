@@ -31,14 +31,14 @@ works without them by animating the imported character portrait.
 - `sit.webp`
 - `stretch.webp`
 
-Provide `manifest.json` with frame layout and playback data:
+The app recognizes the standard filenames automatically, so `manifest.json` is optional. To use
+custom filenames, provide this manifest:
 
 ```json
 {
-  "frameWidth": 512,
-  "frameHeight": 512,
   "actions": {
-    "idle": { "file": "idle.webp", "frames": 32, "fps": 12, "loop": true }
+    "idle": "idle.webp",
+    "greet": "greet.webp"
   }
 }
 ```

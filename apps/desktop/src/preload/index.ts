@@ -19,6 +19,7 @@ import {
   DataOperationResultSchema,
   DeleteAllDataInputSchema,
   CompanionSettingsSchema,
+  DesktopPetPackSchema,
   type AiLoverDesktopApi,
 } from '@ailover/contracts';
 
@@ -100,6 +101,14 @@ const api: AiLoverDesktopApi = {
     getCapabilities: async () => {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.imageCapabilitiesGet);
       return ImageCapabilitiesSchema.parse(result);
+    },
+    getDesktopPetPack: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.desktopPetPackGet);
+      return result === null ? null : DesktopPetPackSchema.parse(result);
+    },
+    importDesktopPetPack: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.desktopPetPackImport);
+      return result === null ? null : DesktopPetPackSchema.parse(result);
     },
   },
   data: {
