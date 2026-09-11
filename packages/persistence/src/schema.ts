@@ -14,6 +14,7 @@ export const companionSettings = sqliteTable('companion_settings', {
   intervalMinutes: integer('interval_minutes').notNull(),
   quietStart: text('quiet_start').notNull(),
   quietEnd: text('quiet_end').notNull(),
+  desktopPetEnabled: integer('desktop_pet_enabled', { mode: 'boolean' }).notNull(),
   lastPromptAt: text('last_prompt_at'),
   updatedAt: text('updated_at').notNull(),
 });

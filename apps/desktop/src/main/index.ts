@@ -70,6 +70,7 @@ const visualAssetRepository = new SqliteVisualAssetRepository(database);
 const assetRoot = join(userDataPath, 'assets');
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
+let desktopPetWindow: BrowserWindow | null = null;
 let companionTimer: NodeJS.Timeout | null = null;
 
 function toCharacterSnapshot(character: Character) {
@@ -236,13 +237,22 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.companionSettingsGet, async () => {
     const stored = companionSettingsRepository.get();
     return CompanionSettingsSchema.parse({ enabled: stored.enabled,
-      intervalMinutes: stored.intervalMinutes, quietStart: stored.quietStart, quietEnd: stored.quietEnd });
+      intervalMinutes: stored.intervalMinutes, quietStart: stored.quietStart, quietEnd: stored.quietEnd,
+      desktopPetEnabled: stored.desktopPetEnabled });
   });
 
   ipcMain.handle(IPC_CHANNELS.companionSettingsSave, async (_event, input: unknown) => {
     const settings = CompanionSettingsSchema.parse(input);
     companionSettingsRepository.save(settings);
+    syncDesktopPet(settings.desktopPetEnabled);
     return settings;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.companionFocusMain, async () => focusMainWindow());
+  ipcMain.handle(IPC_CHANNELS.companionClosePet, async () => {
+    const stored = companionSettingsRepository.get();
+    companionSettingsRepository.save({ ...stored, desktopPetEnabled: false });
+    desktopPetWindow?.close();
   });
 
   ipcMain.handle(IPC_CHANNELS.chatSend, async (_event, input: unknown) => {
@@ -556,13 +566,46 @@ function createMainWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void window.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  loadRendererWindow(window);
 
   return window;
+}
+
+function loadRendererWindow(window: BrowserWindow, pet = false): void {
+  if (process.env.ELECTRON_RENDERER_URL) {
+    const url = new URL(process.env.ELECTRON_RENDERER_URL);
+    if (pet) url.searchParams.set('desktopPet', '1');
+    void window.loadURL(url.toString());
+  } else {
+    void window.loadFile(join(__dirname, '../renderer/index.html'), pet ? { query: { desktopPet: '1' } } : undefined);
+  }
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show();
+  mainWindow?.focus();
+}
+
+function createDesktopPetWindow(): BrowserWindow {
+  const window = new BrowserWindow({
+    width: 220, height: 280, minWidth: 180, minHeight: 220,
+    frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
+    resizable: true, show: false, hasShadow: false,
+    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true,
+      nodeIntegration: false, sandbox: true },
+  });
+  desktopPetWindow = window;
+  window.once('ready-to-show', () => window.showInactive());
+  window.once('closed', () => { if (desktopPetWindow === window) desktopPetWindow = null; });
+  loadRendererWindow(window, true);
+  return window;
+}
+
+function syncDesktopPet(enabled: boolean): void {
+  if (enabled && (!desktopPetWindow || desktopPetWindow.isDestroyed())) createDesktopPetWindow();
+  if (!enabled && desktopPetWindow && !desktopPetWindow.isDestroyed()) desktopPetWindow.close();
 }
 
 async function evaluateCompanionPrompt(): Promise<void> {
@@ -576,9 +619,7 @@ async function evaluateCompanionPrompt(): Promise<void> {
     lastPromptAt, settings })) return;
   const notification = new Notification({ title: character.name, body: `${character.name}想和你聊聊天。` });
   notification.on('click', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
-    mainWindow?.show();
-    mainWindow?.focus();
+    focusMainWindow();
   });
   notification.show();
   companionSettingsRepository.recordPrompt(now);
@@ -587,6 +628,7 @@ async function evaluateCompanionPrompt(): Promise<void> {
 void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
+  syncDesktopPet(companionSettingsRepository.get().desktopPetEnabled);
   startupDurationMs = Math.round(performance.now() - processStartedAt);
   logger.info({ appVersion: app.getVersion() }, 'AiLover started');
   const character = await characterService.findCurrent();
@@ -600,7 +642,7 @@ void app.whenReady().then(async () => {
   companionTimer.unref();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
   });
 });
 

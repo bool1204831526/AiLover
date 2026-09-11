@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 const migrations = [{
   version: 1,
@@ -234,6 +234,12 @@ const migrations = [{
       last_prompt_at TEXT,
       updated_at TEXT NOT NULL
     );
+  `,
+}, {
+  version: 8,
+  sql: `
+    ALTER TABLE companion_settings ADD COLUMN desktop_pet_enabled INTEGER NOT NULL DEFAULT 0
+      CHECK(desktop_pet_enabled IN (0, 1));
   `,
 }] as const;
 

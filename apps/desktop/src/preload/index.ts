@@ -131,6 +131,8 @@ const api: AiLoverDesktopApi = {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.companionSettingsSave, input);
       return CompanionSettingsSchema.parse(result);
     },
+    focusMain: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionFocusMain); },
+    closeDesktopPet: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionClosePet); },
   },
 };
 

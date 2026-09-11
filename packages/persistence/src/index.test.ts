@@ -70,7 +70,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(7);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(8);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -88,11 +88,11 @@ describe('SqliteCompanionSettingsRepository', () => {
     const first = openAppDatabase(path);
     const settings = new SqliteCompanionSettingsRepository(first);
     expect(settings.get().enabled).toBe(false);
-    settings.save({ enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00' });
+    settings.save({ enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00', desktopPetEnabled: true });
     first.close();
     const second = openAppDatabase(path);
     expect(new SqliteCompanionSettingsRepository(second).get()).toMatchObject({
-      enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00',
+      enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00', desktopPetEnabled: true,
     });
     second.close();
   });

@@ -43,7 +43,7 @@ describe('assembleChatContext', () => {
 });
 
 describe('companion scheduling', () => {
-  const settings = { enabled: true, intervalMinutes: 30, quietStart: '23:00', quietEnd: '07:00' };
+  const settings = { enabled: true, intervalMinutes: 30, quietStart: '23:00', quietEnd: '07:00', desktopPetEnabled: false };
   const date = (value: string) => new Date(`2026-09-11T${value}:00+08:00`);
 
   it('nudges only after inactivity interval and never twice in one interval', () => {

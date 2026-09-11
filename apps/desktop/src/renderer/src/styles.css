@@ -7,6 +7,58 @@
   text-rendering: optimizeLegibility;
 }
 
+.desktop-pet-shell {
+  position: relative;
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  padding: 18px;
+  place-items: center;
+  overflow: hidden;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+html:has(.desktop-pet-shell),
+body:has(.desktop-pet-shell),
+#root:has(.desktop-pet-shell) { background: transparent; }
+
+.pet-character {
+  display: grid;
+  gap: 7px;
+  place-items: center;
+  color: #4b4650;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.pet-portrait {
+  display: grid;
+  width: min(72vw, 168px);
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  color: #fff;
+  background: #c5a7ed;
+  border: 3px solid rgb(255 255 255 / 80%);
+  border-radius: 50%;
+  box-shadow: 0 10px 28px rgb(49 38 61 / 22%);
+  animation: pet-float 3.4s ease-in-out infinite;
+  font-size: 52px;
+  font-weight: 700;
+}
+
+.pet-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.pet-name { padding: 5px 10px; background: rgb(255 255 255 / 86%); border-radius: 6px; box-shadow: 0 4px 14px rgb(30 25 35 / 12%); font-size: 12px; font-weight: 650; }
+.pet-close { position: absolute; z-index: 2; top: 8px; right: 8px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: #625c68; background: rgb(255 255 255 / 88%); border: 0; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag; }
+
+@keyframes pet-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
 * {
   box-sizing: border-box;
 }
