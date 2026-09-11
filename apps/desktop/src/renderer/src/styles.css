@@ -576,6 +576,10 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.three-column {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .creator-dialog label {
   display: grid;
   gap: 7px;
@@ -1125,7 +1129,8 @@ button:disabled {
   font-weight: 400;
 }
 
-.settings-section input {
+.settings-section input,
+.settings-section select {
   width: 100%;
   min-height: 42px;
   padding: 0 11px;
@@ -1136,10 +1141,22 @@ button:disabled {
   outline: 0;
 }
 
+.settings-section select { appearance: none; }
+
 .settings-section input:focus {
   border-color: #b96572;
   box-shadow: 0 0 0 3px rgb(185 79 94 / 10%);
 }
+
+.settings-section .toggle-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.toggle-setting span { display: grid; gap: 4px; }
+.settings-section .toggle-setting input { width: 38px; min-height: 20px; accent-color: #b94f5e; }
 
 .connection-result {
   display: grid;

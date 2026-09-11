@@ -4,19 +4,21 @@ import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 
 import { arch, release } from 'node:os';
 import { basename, extname, join, resolve, sep } from 'node:path';
 
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, safeStorage, shell } from 'electron';
 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
-  DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, type ChatStreamEvent,
+  DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
+  type ChatStreamEvent,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
   relationshipSummary } from '@ailover/cognition';
-import { assembleChatContext, CharacterService, type StoredChatMessage, type StoredConversation } from '@ailover/application';
+import { assembleChatContext, CharacterService, shouldSendCompanionPrompt,
+  type StoredChatMessage, type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
@@ -24,7 +26,8 @@ import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
 import { createLogger } from '@ailover/observability';
 import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
-  SqliteMemoryRepository, SqliteModelProfileRepository, validateRestoredDatabase } from '@ailover/persistence';
+  SqliteMemoryRepository, SqliteModelProfileRepository, SqliteCompanionSettingsRepository,
+  validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
@@ -58,6 +61,7 @@ const database = openAppDatabase(databasePath);
 const characterService = new CharacterService(new SqliteCharacterRepository(database));
 const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
+const companionSettingsRepository = new SqliteCompanionSettingsRepository(database);
 const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
   idGenerator: { next: randomUUID } });
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
@@ -66,6 +70,7 @@ const visualAssetRepository = new SqliteVisualAssetRepository(database);
 const assetRoot = join(userDataPath, 'assets');
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
+let companionTimer: NodeJS.Timeout | null = null;
 
 function toCharacterSnapshot(character: Character) {
   return CharacterSnapshotSchema.parse({
@@ -226,6 +231,18 @@ function registerIpcHandlers(): void {
     const conversation = await conversationRepository.findCurrent(character.id);
     if (!conversation) return [];
     return (await conversationRepository.searchMessages(conversation.id, request.query, request.limit)).map(toChatMessage);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.companionSettingsGet, async () => {
+    const stored = companionSettingsRepository.get();
+    return CompanionSettingsSchema.parse({ enabled: stored.enabled,
+      intervalMinutes: stored.intervalMinutes, quietStart: stored.quietStart, quietEnd: stored.quietEnd });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.companionSettingsSave, async (_event, input: unknown) => {
+    const settings = CompanionSettingsSchema.parse(input);
+    companionSettingsRepository.save(settings);
+    return settings;
   });
 
   ipcMain.handle(IPC_CHANNELS.chatSend, async (_event, input: unknown) => {
@@ -548,6 +565,25 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
+async function evaluateCompanionPrompt(): Promise<void> {
+  if (!Notification.isSupported()) return;
+  const character = await characterService.findCurrent();
+  if (!character) return;
+  const conversation = await conversationRepository.findCurrent(character.id);
+  const { lastPromptAt, ...settings } = companionSettingsRepository.get();
+  const now = new Date();
+  if (!shouldSendCompanionPrompt({ now, lastInteractionAt: conversation?.lastMessageAt ?? null,
+    lastPromptAt, settings })) return;
+  const notification = new Notification({ title: character.name, body: `${character.name}想和你聊聊天。` });
+  notification.on('click', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+  notification.show();
+  companionSettingsRepository.recordPrompt(now);
+}
+
 void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
@@ -558,6 +594,10 @@ void app.whenReady().then(async () => {
     void memoryService.decay(character.id, new Date())
       .catch((error: unknown) => logger.warn({ error }, 'Memory decay maintenance failed'));
   }
+  companionTimer = setInterval(() => {
+    void evaluateCompanionPrompt().catch((error: unknown) => logger.warn({ error }, 'Companion prompt evaluation failed'));
+  }, 60_000);
+  companionTimer.unref();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -568,4 +608,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => database.close());
+app.on('before-quit', () => {
+  if (companionTimer) clearInterval(companionTimer);
+  database.close();
+});

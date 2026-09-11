@@ -8,6 +8,16 @@ export const users = sqliteTable('users', {
   createdAt: text('created_at').notNull(),
 });
 
+export const companionSettings = sqliteTable('companion_settings', {
+  id: text('id').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+  intervalMinutes: integer('interval_minutes').notNull(),
+  quietStart: text('quiet_start').notNull(),
+  quietEnd: text('quiet_end').notNull(),
+  lastPromptAt: text('last_prompt_at'),
+  updatedAt: text('updated_at').notNull(),
+});
+
 export const characters = sqliteTable('characters', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id),

@@ -18,6 +18,7 @@ import {
   ImageCapabilitiesSchema,
   DataOperationResultSchema,
   DeleteAllDataInputSchema,
+  CompanionSettingsSchema,
   type AiLoverDesktopApi,
 } from '@ailover/contracts';
 
@@ -118,6 +119,17 @@ const api: AiLoverDesktopApi = {
       const input = DeleteAllDataInputSchema.parse(request);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.dataDeleteAll, input);
       return result === null ? null : DataOperationResultSchema.parse(result);
+    },
+  },
+  companion: {
+    getSettings: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.companionSettingsGet);
+      return CompanionSettingsSchema.parse(result);
+    },
+    saveSettings: async (request) => {
+      const input = CompanionSettingsSchema.parse(request);
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.companionSettingsSave, input);
+      return CompanionSettingsSchema.parse(result);
     },
   },
 };

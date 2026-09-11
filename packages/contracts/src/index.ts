@@ -20,7 +20,18 @@ export const IPC_CHANNELS = {
   dataRestoreBackup: 'data:restore-backup',
   dataExportDiagnostics: 'data:export-diagnostics',
   dataDeleteAll: 'data:delete-all',
+  companionSettingsGet: 'companion-settings:get',
+  companionSettingsSave: 'companion-settings:save',
 } as const;
+
+const TimeOfDaySchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+export const CompanionSettingsSchema = z.object({
+  enabled: z.boolean(),
+  intervalMinutes: z.number().int().min(30).max(1440),
+  quietStart: TimeOfDaySchema,
+  quietEnd: TimeOfDaySchema,
+});
+export type CompanionSettings = z.infer<typeof CompanionSettingsSchema>;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
 export const ModelProfileInputSchema = z.object({
@@ -246,6 +257,10 @@ export interface AiLoverDesktopApi {
     restoreBackup(): Promise<DataOperationResult | null>;
     exportDiagnostics(): Promise<DataOperationResult | null>;
     deleteAll(input: DeleteAllDataInput): Promise<DataOperationResult | null>;
+  };
+  companion: {
+    getSettings(): Promise<CompanionSettings>;
+    saveSettings(input: CompanionSettings): Promise<CompanionSettings>;
   };
 }
 

@@ -15,6 +15,7 @@ import type {
 } from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { MemoryRepository, MemoryType, StoredMemory } from '@ailover/memory';
+import type { CompanionSettings } from '@ailover/contracts';
 
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 import { characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
@@ -297,6 +298,37 @@ export class SqliteConversationRepository implements ConversationRepository {
       role: row.role as StoredChatMessage['role'], content: row.content,
       status: row.status as StoredChatMessage['status'], model: row.model,
       createdAt: new Date(row.createdAt ?? row.created_at!) };
+  }
+}
+
+export class SqliteCompanionSettingsRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public get(): CompanionSettings & { lastPromptAt: Date | null } {
+    const row = this.database.sqlite.prepare('SELECT * FROM companion_settings WHERE id = ?')
+      .get('default') as { enabled: number; interval_minutes: number; quiet_start: string;
+        quiet_end: string; last_prompt_at: string | null } | undefined;
+    if (!row) return { enabled: false, intervalMinutes: 180, quietStart: '23:00', quietEnd: '08:00', lastPromptAt: null };
+    return { enabled: Boolean(row.enabled), intervalMinutes: row.interval_minutes,
+      quietStart: row.quiet_start, quietEnd: row.quiet_end,
+      lastPromptAt: row.last_prompt_at ? new Date(row.last_prompt_at) : null };
+  }
+
+  public save(settings: CompanionSettings): void {
+    this.database.sqlite.prepare(`INSERT INTO companion_settings
+      (id, enabled, interval_minutes, quiet_start, quiet_end, last_prompt_at, updated_at)
+      VALUES ('default', ?, ?, ?, ?, NULL, ?)
+      ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled,
+        interval_minutes = excluded.interval_minutes, quiet_start = excluded.quiet_start,
+        quiet_end = excluded.quiet_end, updated_at = excluded.updated_at`).run(
+      settings.enabled ? 1 : 0, settings.intervalMinutes, settings.quietStart,
+      settings.quietEnd, new Date().toISOString(),
+    );
+  }
+
+  public recordPrompt(at: Date): void {
+    this.database.sqlite.prepare('UPDATE companion_settings SET last_prompt_at = ?, updated_at = ? WHERE id = ?')
+      .run(at.toISOString(), at.toISOString(), 'default');
   }
 }
 

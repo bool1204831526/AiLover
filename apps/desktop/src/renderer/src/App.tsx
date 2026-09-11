@@ -8,7 +8,7 @@ import {
 import type {
   BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
-  RelationshipSummary,
+  RelationshipSummary, CompanionSettings,
 } from '@ailover/contracts';
 import { retainRecentMessages } from '@ailover/application';
 
@@ -478,6 +478,10 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
   const [dataResult, setDataResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [companionSettings, setCompanionSettings] = useState<CompanionSettings>({
+    enabled: false, intervalMinutes: 180, quietStart: '23:00', quietEnd: '08:00',
+  });
+  const [companionSaved, setCompanionSaved] = useState(false);
 
   useEffect(() => {
     const api = window.ailover;
@@ -487,7 +491,16 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
       setProfile({ provider: saved.provider, endpoint: saved.endpoint, model: saved.model });
       setHasSavedKey(saved.hasApiKey);
     });
+    void api.companion.getSettings().then(setCompanionSettings);
   }, []);
+
+  async function saveCompanionSettings(): Promise<void> {
+    setCompanionSaved(false);
+    try {
+      if (window.ailover) setCompanionSettings(await window.ailover.companion.saveSettings(companionSettings));
+      setCompanionSaved(true);
+    } catch { setDataResult({ ok: false, message: '主动陪伴设置保存失败。' }); }
+  }
 
   const updateProvider = (provider: ModelProfileInput['provider']) => {
     setResult(null);
@@ -589,6 +602,26 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
         onClick={() => void testConnection()} type="button">{busy === 'test' ? '正在测试' : '测试连接'}</button>
         <button className="primary-action" disabled={busy !== null || !profile.endpoint || !profile.model}
           onClick={() => void saveProfile()} type="button">{busy === 'save' ? '正在保存' : '保存配置'}</button></div>
+    </section><section className="settings-section companion-settings">
+      <div className="settings-heading"><h3>主动陪伴</h3>
+        <p>长时间没有互动时发送桌面提醒，并自动避开免打扰时段。</p></div>
+      <label className="toggle-setting"><span><strong>允许主动提醒</strong>
+        <small>关闭后不会发送任何陪伴通知。</small></span>
+        <input type="checkbox" checked={companionSettings.enabled}
+          onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, enabled: event.target.checked }); }} /></label>
+      <div className="form-grid three-column">
+        <label><span>无互动间隔</span><select value={companionSettings.intervalMinutes}
+          onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, intervalMinutes: Number(event.target.value) }); }}>
+          <option value={30}>30 分钟</option><option value={60}>1 小时</option>
+          <option value={180}>3 小时</option><option value={360}>6 小时</option><option value={720}>12 小时</option>
+        </select></label>
+        <label><span>免打扰开始</span><input type="time" value={companionSettings.quietStart}
+          onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, quietStart: event.target.value }); }} /></label>
+        <label><span>免打扰结束</span><input type="time" value={companionSettings.quietEnd}
+          onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, quietEnd: event.target.value }); }} /></label>
+      </div>
+      <div className="settings-actions"><button className="primary-action" type="button"
+        onClick={() => void saveCompanionSettings()}>{companionSaved ? '已保存' : '保存提醒设置'}</button></div>
     </section><section className="settings-section data-settings">
       <div className="settings-heading"><h3>本地数据</h3>
         <p>备份包含角色、聊天记录、记忆与角色图片，不包含模型密钥。</p></div>

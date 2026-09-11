@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 const migrations = [{
   version: 1,
@@ -221,6 +221,19 @@ const migrations = [{
     );
     CREATE INDEX IF NOT EXISTS assets_character_current
       ON assets(character_id, type, version DESC);
+  `,
+}, {
+  version: 7,
+  sql: `
+    CREATE TABLE IF NOT EXISTS companion_settings (
+      id TEXT PRIMARY KEY NOT NULL,
+      enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+      interval_minutes INTEGER NOT NULL CHECK(interval_minutes BETWEEN 30 AND 1440),
+      quiet_start TEXT NOT NULL,
+      quiet_end TEXT NOT NULL,
+      last_prompt_at TEXT,
+      updated_at TEXT NOT NULL
+    );
   `,
 }] as const;
 

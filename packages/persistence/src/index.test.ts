@@ -12,6 +12,7 @@ import { MemoryService } from '@ailover/memory';
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
+  SqliteCompanionSettingsRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
 } from './index';
 
@@ -69,7 +70,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(6);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(7);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -77,6 +78,23 @@ describe('database backup safety', () => {
       .run(999, new Date().toISOString());
     snapshot.close();
     expect(() => validateRestoredDatabase(snapshotPath)).toThrow('更高版本');
+  });
+});
+
+describe('SqliteCompanionSettingsRepository', () => {
+  it('defaults to disabled and persists consent and quiet hours', () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const first = openAppDatabase(path);
+    const settings = new SqliteCompanionSettingsRepository(first);
+    expect(settings.get().enabled).toBe(false);
+    settings.save({ enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00' });
+    first.close();
+    const second = openAppDatabase(path);
+    expect(new SqliteCompanionSettingsRepository(second).get()).toMatchObject({
+      enabled: true, intervalMinutes: 180, quietStart: '22:30', quietEnd: '08:00',
+    });
+    second.close();
   });
 });
 
