@@ -5,9 +5,9 @@ works without them by animating the imported character portrait.
 
 ## Preferred Format
 
-- Transparent WebP or PNG sprite sheets
-- One action per file
-- Every frame uses the same square canvas and character scale
+- Transparent animated WebP (recommended) or static PNG
+- One complete action per file; do not combine actions into a sprite sheet
+- Every action uses the same square canvas and character scale
 - Recommended frame size: 512 x 512 pixels
 - Recommended rate: 8-15 frames per second
 - Keep the feet or lower body on a consistent baseline
@@ -36,6 +36,7 @@ custom filenames, provide this manifest:
 
 ```json
 {
+  "version": 1,
   "actions": {
     "idle": "idle.webp",
     "greet": "greet.webp"

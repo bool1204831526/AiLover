@@ -26,6 +26,15 @@ const templates = [
   { id: 'rational', name: '理性', description: '清晰冷静，尊重事实' },
 ] as const;
 const petActionNames = ['idle', 'walk-left', 'walk-right', 'greet', 'happy', 'thinking', 'sleep'] as const;
+const petActionInfo: Record<(typeof petActionNames)[number], { name: string; description: string; requirement: string }> = {
+  idle: { name: '待机', description: '呼吸、眨眼等循环动作', requirement: '必需' },
+  'walk-left': { name: '向左走', description: '角色向左行走的循环动作', requirement: '推荐' },
+  'walk-right': { name: '向右走', description: '角色向右行走的循环动作', requirement: '推荐' },
+  greet: { name: '打招呼', description: '挥手或招呼动作', requirement: '推荐' },
+  happy: { name: '开心', description: '积极情绪反应', requirement: '推荐' },
+  thinking: { name: '思考', description: '等待回复或思考状态', requirement: '推荐' },
+  sleep: { name: '睡眠', description: '长时间待机时的循环动作', requirement: '推荐' },
+};
 const emptyDraft: CharacterDraftInput = {
   name: '', gender: '女', ageSetting: '成年', identity: '你的 AI 伴侣', background: '',
   appearance: '', speakingStyle: '', personalityTemplateId: 'gentle',
@@ -190,13 +199,28 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
           当前使用导入模式。图片服务不可用时，聊天功能仍可正常使用。</div>}
       </section>
       <section className="pet-asset-section"><div className="settings-heading"><h3>桌宠动作素材</h3>
-        <p>选择含 manifest.json 的动画包文件夹。动作文件使用透明 WebP 或 PNG，建议 512 x 512。</p></div>
+        <p>导入一个动作素材文件夹。使用标准文件名时不需要清单文件。</p></div>
         <div className="pet-action-requirements">
           {petActionNames.map((action) =>
             <span className={petPack?.availableActions.includes(action) ? 'available' : ''} key={action}>
-              {petPack?.availableActions.includes(action) ? <Check size={12} /> : null}{action}</span>)}
+              {petPack?.availableActions.includes(action) ? <Check size={12} /> : null}
+              {petActionInfo[action].name} · {action}.webp</span>)}
         </div>
         {petPack && <small>{petPack.message} · 已导入 {petPack.availableActions.length} 个动作</small>}
+        <details className="pet-asset-guide"><summary>查看素材格式和文件清单</summary>
+          <div className="pet-format-grid"><div><strong>推荐格式</strong><span>带透明背景的动画 WebP</span></div>
+            <div><strong>静态备用</strong><span>透明 PNG</span></div><div><strong>画布尺寸</strong><span>建议 512 x 512 像素，所有动作一致</span></div>
+            <div><strong>动画速度</strong><span>建议 8-15 帧/秒</span></div><div><strong>单个文件</strong><span>最大 20 MB</span></div>
+            <div><strong>整个素材包</strong><span>最大 100 MB</span></div></div>
+          <div className="pet-file-list">{petActionNames.map((action) => <div key={action}>
+            <code>{action}.webp</code><span>{petActionInfo[action].name}：{petActionInfo[action].description}</span>
+            <small>{petActionInfo[action].requirement}</small></div>)}</div>
+          <div className="pet-guide-note"><strong>文件夹要求</strong>
+            <p>所有文件直接放在同一文件夹中。角色比例、服装、发型和脚底基线应保持一致；不要包含背景、文字、水印或预制阴影。</p></div>
+          <div className="pet-guide-note"><strong>自定义文件名</strong>
+            <p>使用标准名称时无需 manifest.json。需要自定义名称时，在同一文件夹加入：</p>
+            <pre>{`{\n  "version": 1,\n  "actions": {\n    "idle": "待机.webp",\n    "greet": "挥手.webp"\n  }\n}`}</pre></div>
+        </details>
         <button className="secondary-action import-action" type="button" disabled={importingPetPack}
           onClick={() => void importPetPack()}><Upload size={16} aria-hidden="true" />
           {importingPetPack ? '正在校验' : petPack ? '导入新版本' : '导入动画包'}</button>

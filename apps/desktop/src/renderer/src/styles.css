@@ -1079,6 +1079,23 @@ button:disabled {
 .pet-asset-section > small { color: #77787c; }
 .pet-asset-section .import-action { justify-self: start; }
 
+.pet-asset-guide { border: 1px solid #ddd8d1; background: #f7f5f2; }
+.pet-asset-guide summary { padding: 11px 13px; color: #56575b; cursor: pointer; font-size: 12px; font-weight: 650; }
+.pet-asset-guide[open] summary { border-bottom: 1px solid #ddd8d1; }
+.pet-format-grid { display: grid; gap: 1px; background: #e4e0da; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pet-format-grid > div { display: grid; gap: 3px; padding: 10px 12px; background: #fff; }
+.pet-format-grid strong { color: #505257; font-size: 11px; }
+.pet-format-grid span { color: #77787c; font-size: 11px; }
+.pet-file-list { padding: 8px 12px; background: #fff; }
+.pet-file-list > div { display: grid; align-items: center; gap: 10px; min-height: 35px; border-bottom: 1px solid #eeeae5; grid-template-columns: 110px minmax(0, 1fr) 36px; }
+.pet-file-list > div:last-child { border-bottom: 0; }
+.pet-file-list code { color: #8a4450; font-size: 11px; }
+.pet-file-list span, .pet-file-list small { color: #6e7074; font-size: 11px; }
+.pet-guide-note { padding: 11px 12px; border-top: 1px solid #e2ded8; background: #fff; }
+.pet-guide-note strong { color: #505257; font-size: 11px; }
+.pet-guide-note p { margin: 5px 0 0; color: #77787c; font-size: 11px; line-height: 1.65; }
+.pet-guide-note pre { max-width: 100%; margin: 8px 0 0; padding: 10px; overflow-x: auto; color: #50484b; background: #f1eeea; font-size: 10px; line-height: 1.55; }
+
 .visual-identity-section > p {
   margin-top: 7px;
 }
