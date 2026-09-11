@@ -251,6 +251,15 @@ export class SqliteConversationRepository implements ConversationRepository {
     return rows.map((row) => this.toMessage(row));
   }
 
+  public async searchMessages(conversationId: string, query: string, limit: number): Promise<StoredChatMessage[]> {
+    const rows = this.database.sqlite.prepare(`SELECT * FROM messages
+      WHERE conversation_id = ? AND content LIKE ? ESCAPE '\\'
+      ORDER BY created_at DESC, id DESC LIMIT ?`).all(
+      conversationId, `%${query.replace(/[\\%_]/g, '\\$&')}%`, limit,
+    ) as (typeof messages.$inferSelect)[];
+    return rows.reverse().map((row) => this.toMessage(row));
+  }
+
   public async findMessage(id: string): Promise<StoredChatMessage | null> {
     const row = this.database.orm.select().from(messages).where(eq(messages.id, id)).limit(1).get();
     return row ? this.toMessage(row) : null;

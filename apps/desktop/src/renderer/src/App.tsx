@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
-  RotateCcw, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
+  RotateCcw, Search, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
   UserRound, X,
 } from 'lucide-react';
 
@@ -210,6 +210,8 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
   const [draft, setDraft] = useState('');
   const [requestId, setRequestId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -219,6 +221,14 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     void window.ailover.conversation.load().then(({ messages: restored }) => setMessages(restored))
       .catch(() => setChatError('无法读取聊天记录。'));
   }, [character?.id]);
+
+  async function searchMessages(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (!query || !window.ailover) return;
+    try { setSearchResults(await window.ailover.conversation.search({ query, limit: 50 })); }
+    catch { setChatError('搜索聊天记录失败。'); }
+  }
 
   useEffect(() => {
     if (!window.ailover) return;
@@ -276,13 +286,28 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
   };
 
   return <>
+    <form className="conversation-search" onSubmit={(event) => void searchMessages(event)}>
+      <Search size={16} aria-hidden="true" />
+      <input aria-label="搜索聊天记录" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="搜索聊天记录" maxLength={200} />
+      {searchResults !== null && <button type="button" aria-label="关闭搜索结果" title="关闭搜索结果"
+        onClick={() => { setSearchResults(null); setSearchQuery(''); }}><X size={15} /></button>}
+    </form>
+    {searchResults !== null && <div className="search-results" role="status">
+      <div className="search-results-heading">找到 {searchResults.length} 条记录</div>
+      {searchResults.map((message) => <button className="search-result" type="button" key={message.id}
+        onClick={() => { setSearchResults(null); document.getElementById(`message-${message.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+        <span>{message.role === 'user' ? '你' : character?.name} · {new Date(message.createdAt).toLocaleString('zh-CN')}</span>
+        <strong>{message.content}</strong>
+      </button>)}
+    </div>}
     <div className={messages.length ? 'message-list' : 'empty-conversation'}>
       {!messages.length ? <><MessageCircle aria-hidden="true" size={30} strokeWidth={1.5} />
         <p>{bootstrapError ?? chatError ?? (character
           ? modelConfigured ? `${character.name}已经准备好。说点什么，开始你们的第一段对话。`
             : '角色已经准备好。配置聊天模型后，就可以开始对话。'
           : '创建角色后，即可开始你们的第一段对话。')}</p></> : messages.map((message) =>
-        <article className={`message-row ${message.role}`} key={message.id}>
+        <article id={`message-${message.id}`} className={`message-row ${message.role}`} key={message.id}>
           <div className={`message-bubble ${message.status}`}>
             <span className="message-author">{message.role === 'user' ? '你' : character?.name}</span>
             <p>{message.content || (message.status === 'streaming' ? '正在思考…' : '未能生成回复')}</p>

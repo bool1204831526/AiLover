@@ -268,6 +268,33 @@ button:disabled {
   margin-top: 18px;
 }
 
+.conversation-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.conversation-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+.conversation-search button { display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.search-results { margin: 0 0 12px; border: 1px solid var(--line); background: var(--surface); }
+.search-results-heading { padding: 8px 10px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+.search-result { display: block; width: 100%; padding: 9px 10px; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+.search-result:last-child { border-bottom: 0; }
+.search-result:hover { background: var(--surface-raised); }
+.search-result span, .search-result strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result span { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+.search-result strong { font-size: 13px; font-weight: 500; }
+
 .message-list {
   min-height: 0;
   padding: 24px 26px 12px;

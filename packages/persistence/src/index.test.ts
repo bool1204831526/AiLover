@@ -140,6 +140,8 @@ describe('SqliteConversationRepository', () => {
     expect((await restored.findCurrent(character.id))?.id).toBe('conversation-1');
     expect((await restored.listMessages('conversation-1')).map(({ content }) => content))
       .toEqual(['你好', '很高兴见到你']);
+    expect((await restored.searchMessages('conversation-1', '高兴', 10)).map(({ id }) => id))
+      .toEqual(['message-2']);
     second.close();
   });
 });

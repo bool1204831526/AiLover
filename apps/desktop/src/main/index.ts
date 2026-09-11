@@ -9,7 +9,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
-  ConversationSnapshotSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
+  ConversationSnapshotSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, type ChatStreamEvent,
 } from '@ailover/contracts';
@@ -217,6 +217,15 @@ function registerIpcHandlers(): void {
     const messages = await conversationRepository.listMessages(conversation.id);
     return ConversationHistorySchema.parse({ conversation: toConversationSnapshot(conversation),
       messages: messages.map(toChatMessage) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.conversationSearch, async (_event, input: unknown) => {
+    const request = ConversationSearchInputSchema.parse(input);
+    const character = await characterService.findCurrent();
+    if (!character) return [];
+    const conversation = await conversationRepository.findCurrent(character.id);
+    if (!conversation) return [];
+    return (await conversationRepository.searchMessages(conversation.id, request.query, request.limit)).map(toChatMessage);
   });
 
   ipcMain.handle(IPC_CHANNELS.chatSend, async (_event, input: unknown) => {
