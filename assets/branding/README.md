@@ -19,9 +19,9 @@ user assets here.
 - `installer-sidebar.bmp`: 164 x 314 pixels for the assisted installer.
 - `installer-header.bmp`: 150 x 57 pixels for installer header pages.
 
-The current product mark is a dark charcoal wordmark paired with a restrained rose-red square and a
-white `A`. A final asset may refine this mark, but should remain legible at 16 pixels and should avoid
-fine lines, small text, photographic detail and gradients that disappear at taskbar size.
+The approved product mark is a lavender heart with a white `A` on a transparent background. Future
+refinements should remain legible at 16 pixels and avoid fine lines, small text, photographic detail
+and gradients that disappear at taskbar size.
 
 After these files are added, the packaging configuration must explicitly reference them and the
 installer, executable, taskbar and Start menu rendering must be checked on Windows 10 and 11.

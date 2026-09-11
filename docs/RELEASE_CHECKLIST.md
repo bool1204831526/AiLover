@@ -26,7 +26,8 @@ GitHub runs the same gate from `.github/workflows/windows-quality.yml` once a re
 - [x] Ten-thousand-message persistence profile with a bounded 500-message retained window
 - [ ] Windows 11 clean-machine install/start/uninstall exercise
 - [ ] Production Authenticode certificate verification
-- [ ] Final branded application icon verification
+- [x] Branded executable and installer icon verification on Windows 10
+- [ ] Branded taskbar and Start menu icon verification on Windows 11
 
 ## Release Policy
 

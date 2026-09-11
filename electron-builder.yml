@@ -9,12 +9,15 @@ asar: true
 electronDist: node_modules/electron/dist
 npmRebuild: false
 win:
+  icon: assets/branding/app-icon.ico
   target:
     - target: nsis
       arch:
         - x64
   artifactName: ${productName}-${version}-setup.${ext}
 nsis:
+  installerIcon: assets/branding/app-icon.ico
+  uninstallerIcon: assets/branding/app-icon.ico
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
