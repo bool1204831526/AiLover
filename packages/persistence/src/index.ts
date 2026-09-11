@@ -290,11 +290,13 @@ export class SqliteConversationRepository implements ConversationRepository {
       startedAt: new Date(row.startedAt), lastMessageAt: new Date(row.lastMessageAt) };
   }
 
-  private toMessage(row: typeof messages.$inferSelect): StoredChatMessage {
-    return { id: row.id, conversationId: row.conversationId,
+  private toMessage(row: typeof messages.$inferSelect & Partial<{
+    conversation_id: string; created_at: string;
+  }>): StoredChatMessage {
+    return { id: row.id, conversationId: row.conversationId ?? row.conversation_id!,
       role: row.role as StoredChatMessage['role'], content: row.content,
       status: row.status as StoredChatMessage['status'], model: row.model,
-      createdAt: new Date(row.createdAt) };
+      createdAt: new Date(row.createdAt ?? row.created_at!) };
   }
 }
 
