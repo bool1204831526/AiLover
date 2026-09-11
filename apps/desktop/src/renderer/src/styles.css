@@ -30,8 +30,8 @@ body:has(.desktop-pet-shell),
   color: #4b4650;
   background: transparent;
   border: 0;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
+  cursor: grab;
+  -webkit-app-region: drag;
 }
 
 .pet-portrait {
@@ -45,7 +45,7 @@ body:has(.desktop-pet-shell),
   border: 3px solid rgb(255 255 255 / 80%);
   border-radius: 50%;
   box-shadow: 0 10px 28px rgb(49 38 61 / 22%);
-  animation: pet-float 3.4s ease-in-out infinite;
+  animation: pet-breathe 3.4s ease-in-out infinite;
   font-size: 52px;
   font-weight: 700;
 }
@@ -53,11 +53,19 @@ body:has(.desktop-pet-shell),
 .pet-portrait img { width: 100%; height: 100%; object-fit: cover; }
 .pet-name { padding: 5px 10px; background: rgb(255 255 255 / 86%); border-radius: 6px; box-shadow: 0 4px 14px rgb(30 25 35 / 12%); font-size: 12px; font-weight: 650; }
 .pet-close { position: absolute; z-index: 2; top: 8px; right: 8px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: #625c68; background: rgb(255 255 255 / 88%); border: 0; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag; }
+.pet-open { position: absolute; right: 10px; bottom: 10px; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; color: #fff; background: #a94756; border: 0; border-radius: 50%; box-shadow: 0 5px 14px rgb(66 35 43 / 24%); cursor: pointer; -webkit-app-region: no-drag; }
 
-@keyframes pet-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
+.pet-action-sway { animation: pet-sway 1.7s ease-in-out 2; }
+.pet-action-bounce { animation: pet-bounce 0.7s ease-in-out 3; }
+.pet-action-greet { transform-origin: 50% 90%; animation: pet-greet 0.55s ease-in-out 4; }
+
+@keyframes pet-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.02); }
 }
+@keyframes pet-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(4deg); } }
+@keyframes pet-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+@keyframes pet-greet { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-6deg) translateY(-3px); } }
 
 * {
   box-sizing: border-box;

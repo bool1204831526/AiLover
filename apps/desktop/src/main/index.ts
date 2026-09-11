@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 
 import { arch, release } from 'node:os';
 import { basename, extname, join, resolve, sep } from 'node:path';
 
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
@@ -72,6 +72,8 @@ const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 let desktopPetWindow: BrowserWindow | null = null;
 let companionTimer: NodeJS.Timeout | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 
 function toCharacterSnapshot(character: Character) {
   return CharacterSnapshotSchema.parse({
@@ -557,6 +559,11 @@ function createMainWindow(): BrowserWindow {
     },
   });
   mainWindow = window;
+  window.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    window.hide();
+  });
   window.once('closed', () => { if (mainWindow === window) mainWindow = null; });
 
   window.once('ready-to-show', () => window.show());
@@ -608,6 +615,29 @@ function syncDesktopPet(enabled: boolean): void {
   if (!enabled && desktopPetWindow && !desktopPetWindow.isDestroyed()) desktopPetWindow.close();
 }
 
+function createTray(): void {
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'branding', 'app-icon.png')
+    : join(app.getAppPath(), 'assets', 'branding', 'app-icon.png');
+  tray = new Tray(nativeImage.createFromPath(iconPath).resize({ width: 20, height: 20 }));
+  tray.setToolTip('AiLover');
+  const rebuildMenu = () => {
+    const settings = companionSettingsRepository.get();
+    tray?.setContextMenu(Menu.buildFromTemplate([
+      { label: '打开 AiLover', click: () => focusMainWindow() },
+      { label: '显示桌面角色', type: 'checkbox', checked: settings.desktopPetEnabled, click: (item) => {
+        companionSettingsRepository.save({ ...settings, desktopPetEnabled: item.checked });
+        syncDesktopPet(item.checked);
+        rebuildMenu();
+      } },
+      { type: 'separator' },
+      { label: '退出 AiLover', click: () => { isQuitting = true; app.quit(); } },
+    ]));
+  };
+  rebuildMenu();
+  tray.on('double-click', () => focusMainWindow());
+}
+
 async function evaluateCompanionPrompt(): Promise<void> {
   if (!Notification.isSupported()) return;
   const character = await characterService.findCurrent();
@@ -628,6 +658,7 @@ async function evaluateCompanionPrompt(): Promise<void> {
 void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
+  createTray();
   syncDesktopPet(companionSettingsRepository.get().desktopPetEnabled);
   startupDurationMs = Math.round(performance.now() - processStartedAt);
   logger.info({ appVersion: app.getVersion() }, 'AiLover started');
@@ -647,10 +678,11 @@ void app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // The tray owns the application lifetime. Users exit explicitly from its menu.
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   if (companionTimer) clearInterval(companionTimer);
   database.close();
 });

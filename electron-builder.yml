@@ -5,6 +5,9 @@ directories:
 files:
   - out/**/*
   - package.json
+extraResources:
+  - from: assets/branding/app-icon.png
+    to: branding/app-icon.png
 asar: true
 electronDist: node_modules/electron/dist
 npmRebuild: false
