@@ -7,6 +7,7 @@ const projectRoot = process.cwd();
 const fromRoot = (path: string) => resolve(projectRoot, path);
 
 const aliases = {
+  '@ailover/backup': fromRoot('./packages/backup/src/index.ts'),
   '@ailover/contracts': fromRoot('./packages/contracts/src/index.ts'),
   '@ailover/cognition': fromRoot('./packages/cognition/src/index.ts'),
   '@ailover/domain': fromRoot('./packages/domain/src/index.ts'),

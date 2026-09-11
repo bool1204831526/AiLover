@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 
 import Database from 'better-sqlite3';
 import { and, desc, eq } from 'drizzle-orm';
@@ -15,7 +15,7 @@ import type {
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { MemoryRepository, MemoryType, StoredMemory } from '@ailover/memory';
 
-import { migrate } from './migrations';
+import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 import { characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
 
 const LOCAL_USER_ID = 'local-user';
@@ -38,7 +38,60 @@ export function openAppDatabase(path: string): AppDatabase {
     VALUES (?, ?, ?, ?, ?)`).run(
     LOCAL_USER_ID, '本地用户', 'zh-CN', 'Asia/Shanghai', new Date().toISOString(),
   );
-  return { sqlite, orm: drizzle(sqlite), close: () => sqlite.close() };
+  return { sqlite, orm: drizzle(sqlite), close: () => { if (sqlite.open) sqlite.close(); } };
+}
+
+export async function createSanitizedDatabaseSnapshot(
+  database: AppDatabase, destination: string,
+): Promise<void> {
+  await database.sqlite.backup(destination);
+  const snapshot = new Database(destination);
+  try {
+    snapshot.prepare('UPDATE model_profiles SET encrypted_api_key = NULL').run();
+    snapshot.pragma('wal_checkpoint(TRUNCATE)');
+  } finally { snapshot.close(); }
+}
+
+export function validateRestoredDatabase(path: string): { schemaVersion: number } {
+  const candidate = new Database(path, { readonly: true, fileMustExist: true });
+  try {
+    const integrity = candidate.prepare('PRAGMA integrity_check').get() as { integrity_check: string };
+    if (integrity.integrity_check !== 'ok') throw new Error('备份数据库完整性检查失败。');
+    const required = ['users', 'characters', 'schema_migrations'];
+    const tables = candidate.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()
+      .map((row) => (row as { name: string }).name);
+    if (required.some((table) => !tables.includes(table))) throw new Error('备份缺少必要数据表。');
+    const row = candidate.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations')
+      .get() as { version: number };
+    if (row.version > CURRENT_SCHEMA_VERSION) throw new Error('备份来自更高版本的 AiLover。');
+    return { schemaVersion: row.version };
+  } finally { candidate.close(); }
+}
+
+export function prepareRestoredDatabase(
+  path: string, assetRoot: string, availableAssetPaths?: ReadonlySet<string>,
+): void {
+  const candidate = new Database(path);
+  try {
+    candidate.prepare('UPDATE model_profiles SET encrypted_api_key = NULL').run();
+    const rows = candidate.prepare('SELECT id, character_id, local_path FROM assets').all() as
+      { id: string; character_id: string; local_path: string }[];
+    const update = candidate.prepare('UPDATE assets SET local_path = ? WHERE id = ?');
+    candidate.transaction(() => {
+      for (const row of rows) {
+        const rawExtension = extname(row.local_path).toLowerCase();
+        const extension = rawExtension === '.jpeg' ? '.jpg' : rawExtension;
+        if (!['.png', '.jpg', '.webp'].includes(extension)) {
+          throw new Error('备份包含不支持的角色资产类型。');
+        }
+        const relativePath = `assets/${row.character_id}/${row.id}${extension}`;
+        if (availableAssetPaths && !availableAssetPaths.has(relativePath)) {
+          throw new Error('备份缺少数据库引用的角色资产。');
+        }
+        update.run(join(assetRoot, row.character_id, `${row.id}${extension}`), row.id);
+      }
+    })();
+  } finally { candidate.close(); }
 }
 
 export class SqliteCharacterRepository implements CharacterRepository {
@@ -440,7 +493,7 @@ function toFtsQuery(query: string): string {
   return [...new Set(terms)].map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
 }
 
-export { migrate } from './migrations';
+export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories,
   messages, modelProfiles, personalityBaselines, personalityStates, reflections,
   relationshipStates, users } from './schema';

@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
+  dataExportBackup: 'data:export-backup',
+  dataRestoreBackup: 'data:restore-backup',
 } as const;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
@@ -128,6 +130,14 @@ export const CharacterVisualProfileSchema = z.object({
 });
 export type CharacterVisualProfile = z.infer<typeof CharacterVisualProfileSchema>;
 
+export const DataOperationResultSchema = z.object({
+  ok: z.literal(true),
+  message: z.string().min(1),
+  fileName: z.string().min(1),
+  requiresRestart: z.boolean(),
+});
+export type DataOperationResult = z.infer<typeof DataOperationResultSchema>;
+
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
 ]);
@@ -215,6 +225,10 @@ export interface AiLoverDesktopApi {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;
     getCapabilities(): Promise<ImageCapabilities>;
+  };
+  data: {
+    exportBackup(): Promise<DataOperationResult | null>;
+    restoreBackup(): Promise<DataOperationResult | null>;
   };
 }
 

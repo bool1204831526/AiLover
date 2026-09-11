@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 
+export const CURRENT_SCHEMA_VERSION = 6;
+
 const migrations = [{
   version: 1,
   sql: `

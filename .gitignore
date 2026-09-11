@@ -15,6 +15,7 @@ data/
 database/
 logs/
 backups/
+*.ailover-backup
 *.db
 *.db-shm
 *.db-wal

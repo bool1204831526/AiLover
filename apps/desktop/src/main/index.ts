@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve, sep } from 'node:path';
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
@@ -10,8 +10,9 @@ import {
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
-  ImageCapabilitiesSchema, type ChatStreamEvent,
+  DataOperationResultSchema, ImageCapabilitiesSchema, type ChatStreamEvent,
 } from '@ailover/contracts';
+import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
   relationshipSummary } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, type StoredChatMessage, type StoredConversation } from '@ailover/application';
@@ -20,8 +21,9 @@ import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
-import { openAppDatabase, SqliteCharacterRepository, SqliteCognitionRepository,
-  SqliteConversationRepository, SqliteMemoryRepository, SqliteModelProfileRepository } from '@ailover/persistence';
+import { createSanitizedDatabaseSnapshot, openAppDatabase, prepareRestoredDatabase,
+  SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
+  SqliteMemoryRepository, SqliteModelProfileRepository, validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
@@ -47,7 +49,9 @@ if (isSmokeTest) {
 const config = loadAppConfig();
 const logger = createLogger({ level: config.logLevel, environment: config.environment });
 let smokeTestCompleted = false;
-const database = openAppDatabase(join(app.getPath('userData'), 'data', 'ailover.sqlite'));
+const userDataPath = app.getPath('userData');
+const databasePath = join(userDataPath, 'data', 'ailover.sqlite');
+const database = openAppDatabase(databasePath);
 const characterService = new CharacterService(new SqliteCharacterRepository(database));
 const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
@@ -56,7 +60,7 @@ const memoryService = new MemoryService({ repository: new SqliteMemoryRepository
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
-const assetRoot = join(app.getPath('userData'), 'assets');
+const assetRoot = join(userDataPath, 'assets');
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 
@@ -100,6 +104,10 @@ function decryptApiKey(encrypted: string | null): string | undefined {
   if (!encrypted) return undefined;
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable');
   return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+}
+
+function restartApplication(): void {
+  setTimeout(() => { app.relaunch(); app.exit(0); }, 250);
 }
 
 function ensureVisualIdentity(character: Character) {
@@ -298,6 +306,86 @@ function registerIpcHandlers(): void {
       ? inferImageCapabilities(profile.provider, result.models)
       : { analysis: false, generation: false, provider: profile.provider,
         reason: '图片能力探测失败，不影响聊天和本地图片导入' });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.dataExportBackup, async () => {
+    if (!mainWindow) return null;
+    const date = new Date().toISOString().slice(0, 10);
+    const destination = await dialog.showSaveDialog(mainWindow, { title: '导出 AiLover 备份',
+      defaultPath: join(app.getPath('documents'), `AiLover-backup-${date}.ailover-backup`),
+      filters: [{ name: 'AiLover 备份', extensions: ['ailover-backup'] }] });
+    if (destination.canceled || !destination.filePath) return null;
+    const temporary = await mkdtemp(join(app.getPath('temp'), 'ailover-backup-'));
+    try {
+      const snapshotPath = join(temporary, 'ailover.sqlite');
+      await createSanitizedDatabaseSnapshot(database, snapshotPath);
+      const document = createBackupDocument({ appVersion: app.getVersion(), createdAt: new Date(),
+        database: await readFile(snapshotPath), assets: await readAssetEntries(assetRoot) });
+      await writeFile(destination.filePath, document, { encoding: 'utf8' });
+      return DataOperationResultSchema.parse({ ok: true, message: '完整备份已导出，模型密钥未包含在内。',
+        fileName: basename(destination.filePath), requiresRestart: false });
+    } finally { await rm(temporary, { recursive: true, force: true }); }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.dataRestoreBackup, async () => {
+    if (!mainWindow) return null;
+    const selection = await dialog.showOpenDialog(mainWindow, { title: '选择 AiLover 备份',
+      properties: ['openFile'], filters: [{ name: 'AiLover 备份', extensions: ['ailover-backup'] }] });
+    const sourcePath = selection.filePaths[0];
+    if (selection.canceled || !sourcePath) return null;
+    if ((await stat(sourcePath)).size > 700 * 1024 * 1024) throw new Error('备份文件过大。');
+    const parsed = parseBackupDocument(await readFile(sourcePath, 'utf8'));
+    const temporary = await mkdtemp(join(app.getPath('temp'), 'ailover-restore-'));
+    const stagedDatabase = join(temporary, 'ailover.sqlite');
+    const stagedAssets = join(temporary, 'assets');
+    try {
+      await writeFile(stagedDatabase, parsed.database);
+      await mkdir(stagedAssets, { recursive: true });
+      for (const asset of parsed.assets) {
+        const parts = asset.path.split('/').slice(1);
+        const destination = join(stagedAssets, ...parts);
+        await mkdir(resolve(destination, '..'), { recursive: true });
+        await writeFile(destination, asset.data);
+      }
+      validateRestoredDatabase(stagedDatabase);
+      prepareRestoredDatabase(stagedDatabase, assetRoot,
+        new Set(parsed.assets.map(({ path }) => path)));
+      validateRestoredDatabase(stagedDatabase);
+      const confirmation = await dialog.showMessageBox(mainWindow, { type: 'warning',
+        title: '恢复备份', message: '恢复将替换当前角色、聊天记录和本地资产。',
+        detail: '模型密钥不会从备份恢复。完成后 AiLover 将重新启动。',
+        buttons: ['取消', '恢复并重启'], defaultId: 0, cancelId: 0, noLink: true });
+      if (confirmation.response !== 1) return null;
+      for (const controller of activeChats.values()) controller.abort();
+      const rollback = join(userDataPath, `restore-rollback-${randomUUID()}`);
+      const rollbackDatabase = join(rollback, 'ailover.sqlite');
+      const rollbackAssets = join(rollback, 'assets');
+      await mkdir(rollback, { recursive: true });
+      database.close();
+      let assetsMoved = false;
+      try {
+        await copyFile(databasePath, rollbackDatabase);
+        try { await rename(assetRoot, rollbackAssets); assetsMoved = true; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        await copyFile(stagedDatabase, databasePath);
+        await rename(stagedAssets, assetRoot);
+      } catch (error) {
+        await copyFile(rollbackDatabase, databasePath).catch(() => undefined);
+        if (assetsMoved) {
+          await rm(assetRoot, { recursive: true, force: true }).catch(() => undefined);
+          await rename(rollbackAssets, assetRoot).catch(() => undefined);
+        }
+        restartApplication();
+        throw error;
+      }
+      await rm(rollback, { recursive: true, force: true })
+        .catch((error: unknown) => logger.warn({ error }, 'Restore rollback cleanup failed'));
+      const result = DataOperationResultSchema.parse({ ok: true,
+        message: '备份验证并恢复完成，AiLover 正在重新启动。', fileName: basename(sourcePath),
+        requiresRestart: true });
+      restartApplication();
+      return result;
+    } finally { await rm(temporary, { recursive: true, force: true }); }
   });
 }
 

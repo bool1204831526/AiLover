@@ -12,6 +12,7 @@ import { MemoryService } from '@ailover/memory';
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
+  createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
 } from './index';
 
 const paths: string[] = [];
@@ -57,6 +58,28 @@ describe('SqliteModelProfileRepository', () => {
   });
 });
 
+describe('database backup safety', () => {
+  it('removes credentials and rejects databases from future schema versions', async () => {
+    const sourcePath = join(tmpdir(), `ailover-source-${randomUUID()}.sqlite`);
+    const snapshotPath = join(tmpdir(), `ailover-snapshot-${randomUUID()}.sqlite`);
+    paths.push(sourcePath, snapshotPath);
+    const source = openAppDatabase(sourcePath);
+    await new SqliteModelProfileRepository(source).save({ provider: 'openai-compatible',
+      endpoint: 'https://example.test/v1', model: 'model-a', encryptedApiKey: 'encrypted-secret',
+      updatedAt: new Date() });
+    await createSanitizedDatabaseSnapshot(source, snapshotPath);
+    source.close();
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(6);
+    const snapshot = openAppDatabase(snapshotPath);
+    expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
+      .toEqual({ encrypted_api_key: null });
+    snapshot.sqlite.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
+      .run(999, new Date().toISOString());
+    snapshot.close();
+    expect(() => validateRestoredDatabase(snapshotPath)).toThrow('更高版本');
+  });
+});
+
 describe('SqliteVisualAssetRepository', () => {
   it('versions imported portraits and restores the visual identity', async () => {
     const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
@@ -81,6 +104,13 @@ describe('SqliteVisualAssetRepository', () => {
     expect(restored.getIdentity(character.id)?.generationPrompt).toBe('清晰角色肖像');
     expect(restored.getCurrentAsset(character.id)?.id).toBe('asset-2');
     second.close();
+    const assetPaths = new Set(['assets/character-visual/asset-1.png',
+      'assets/character-visual/asset-2.png']);
+    prepareRestoredDatabase(path, 'C:\\restored-assets', assetPaths);
+    const third = openAppDatabase(path);
+    expect(new SqliteVisualAssetRepository(third).getCurrentAsset(character.id)?.localPath)
+      .toBe(join('C:\\restored-assets', 'character-visual', 'asset-2.png'));
+    third.close();
   });
 });
 

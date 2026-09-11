@@ -36,6 +36,9 @@ importers:
       '@ailover/application':
         specifier: workspace:*
         version: link:packages/application
+      '@ailover/backup':
+        specifier: workspace:*
+        version: link:packages/backup
       '@ailover/cognition':
         specifier: workspace:*
         version: link:packages/cognition
@@ -116,6 +119,12 @@ importers:
       '@ailover/domain':
         specifier: workspace:*
         version: link:../domain
+
+  packages/backup:
+    dependencies:
+      zod:
+        specifier: ^4.1.5
+        version: 4.5.4
 
   packages/cognition:
     dependencies:

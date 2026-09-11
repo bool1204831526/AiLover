@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  Check, ChevronLeft, Heart, Image, MessageCircle, RotateCcw, SendHorizontal, Settings,
-  ShieldCheck, SlidersHorizontal, Square, Upload, UserRound, X,
+  Check, ChevronLeft, DatabaseBackup, Download, Heart, Image, MessageCircle, RotateCcw,
+  SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Upload, UserRound, X,
 } from 'lucide-react';
 
 import type {
@@ -445,6 +445,8 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
   const [hasSavedKey, setHasSavedKey] = useState(false);
   const [result, setResult] = useState<ModelConnectionResult | null>(null);
   const [busy, setBusy] = useState<'test' | 'save' | null>(null);
+  const [dataBusy, setDataBusy] = useState<'export' | 'restore' | null>(null);
+  const [dataResult, setDataResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     const api = window.ailover;
@@ -489,6 +491,27 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
     } finally { setBusy(null); }
   }
 
+  async function exportBackup(): Promise<void> {
+    setDataBusy('export');
+    setDataResult(null);
+    try {
+      const result = window.ailover ? await window.ailover.data.exportBackup()
+        : { ok: true as const, message: '预览模式：备份导出已取消', fileName: '', requiresRestart: false };
+      if (result) setDataResult({ ok: true, message: result.message });
+    } catch { setDataResult({ ok: false, message: '备份导出失败，现有数据没有改变。' }); }
+    finally { setDataBusy(null); }
+  }
+
+  async function restoreBackup(): Promise<void> {
+    setDataBusy('restore');
+    setDataResult(null);
+    try {
+      const result = window.ailover ? await window.ailover.data.restoreBackup() : null;
+      if (result) setDataResult({ ok: true, message: result.message });
+    } catch { setDataResult({ ok: false, message: '备份无效或恢复失败，现有数据没有改变。' }); }
+    finally { setDataBusy(null); }
+  }
+
   return <><header className="conversation-header"><div><span className="eyebrow">应用设置</span>
     <h2>模型服务</h2></div></header><div className="settings-page"><section className="settings-section">
       <div className="settings-heading"><h3>聊天模型</h3><p>选择本地模型，或连接兼容 OpenAI API 的服务。</p></div>
@@ -512,6 +535,17 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
         onClick={() => void testConnection()} type="button">{busy === 'test' ? '正在测试' : '测试连接'}</button>
         <button className="primary-action" disabled={busy !== null || !profile.endpoint || !profile.model}
           onClick={() => void saveProfile()} type="button">{busy === 'save' ? '正在保存' : '保存配置'}</button></div>
+    </section><section className="settings-section data-settings">
+      <div className="settings-heading"><h3>本地数据</h3>
+        <p>备份包含角色、聊天记录、记忆与角色图片，不包含模型密钥。</p></div>
+      {dataResult && <div className={dataResult.ok ? 'connection-result success' : 'connection-result error'}>
+        <strong>{dataResult.ok ? '操作完成' : '操作失败'}</strong><span>{dataResult.message}</span></div>}
+      <div className="data-actions"><button className="secondary-action" type="button"
+        disabled={dataBusy !== null} onClick={() => void exportBackup()}><Download size={16} aria-hidden="true" />
+        {dataBusy === 'export' ? '正在导出' : '导出完整备份'}</button>
+        <button className="secondary-action" type="button" disabled={dataBusy !== null}
+          onClick={() => void restoreBackup()}><DatabaseBackup size={16} aria-hidden="true" />
+          {dataBusy === 'restore' ? '正在验证' : '从备份恢复'}</button></div>
     </section></div></>;
 }
 
