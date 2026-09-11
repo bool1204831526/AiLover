@@ -45,6 +45,15 @@ describe('probeModelProvider', () => {
 });
 
 describe('streamModelChat', () => {
+  it('classifies provider throttling as retryable without returning partial content', async () => {
+    const consume = async () => {
+      for await (const chunk of streamModelChat({ provider: 'openai-compatible',
+        endpoint: 'https://example.test/v1', model: 'model-a', messages: [] },
+      async () => new Response('', { status: 429 }))) expect(chunk).toBe('');
+    };
+    await expect(consume()).rejects.toMatchObject({ retryable: true });
+  });
+
   it('parses OpenAI-compatible SSE chunks split across network reads', async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream({

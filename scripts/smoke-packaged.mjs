@@ -2,8 +2,10 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const executable = resolve('release/win-unpacked/AiLover.exe');
+const executable = process.env.AILOVER_SMOKE_EXECUTABLE
+  ? resolve(process.env.AILOVER_SMOKE_EXECUTABLE) : resolve('release/win-unpacked/AiLover.exe');
 const smokeUserData = resolve('release/.smoke-user-data');
+const startedAt = performance.now();
 
 if (!existsSync(executable)) {
   throw new Error(`Packaged executable is missing: ${executable}`);
@@ -51,4 +53,9 @@ if (stderr.includes('Uncaught Exception') || stderr.includes('ERR_UNSUPPORTED_NO
   throw new Error(`Packaged app reported a main-process error:\n${stderr}`);
 }
 
-console.log('Packaged app completed renderer, preload and IPC startup.');
+const durationMs = Math.round(performance.now() - startedAt);
+if (durationMs > 10_000) {
+  throw new Error(`Packaged app startup exceeded the 10 second release budget: ${durationMs} ms`);
+}
+
+console.log(`Packaged app completed renderer, preload and IPC startup in ${durationMs} ms.`);
