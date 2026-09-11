@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@ailover/contracts": ["packages/contracts/src/index.ts"],
+      "@ailover/cognition": ["packages/cognition/src/index.ts"],
       "@ailover/domain": ["packages/domain/src/index.ts"],
       "@ailover/application": ["packages/application/src/index.ts"],
       "@ailover/memory": ["packages/memory/src/index.ts"],

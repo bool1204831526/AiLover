@@ -128,6 +128,71 @@ const migrations = [{
       DELETE FROM memories_fts WHERE memory_id = old.id;
     END;
   `,
+}, {
+  version: 5,
+  sql: `
+    CREATE TABLE IF NOT EXISTS emotion_states (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      valence REAL NOT NULL CHECK(valence BETWEEN 0 AND 1),
+      arousal REAL NOT NULL CHECK(arousal BETWEEN 0 AND 1),
+      security REAL NOT NULL CHECK(security BETWEEN 0 AND 1),
+      affection REAL NOT NULL CHECK(affection BETWEEN 0 AND 1),
+      reason TEXT NOT NULL, source_message_id TEXT REFERENCES messages(id),
+      rule_version TEXT NOT NULL, recorded_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS emotion_states_current
+      ON emotion_states(character_id, recorded_at DESC);
+    CREATE TABLE IF NOT EXISTS relationship_states (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      trust REAL NOT NULL CHECK(trust BETWEEN 0 AND 1),
+      intimacy REAL NOT NULL CHECK(intimacy BETWEEN 0 AND 1),
+      affection REAL NOT NULL CHECK(affection BETWEEN 0 AND 1),
+      familiarity REAL NOT NULL CHECK(familiarity BETWEEN 0 AND 1),
+      comfort REAL NOT NULL CHECK(comfort BETWEEN 0 AND 1),
+      conflict REAL NOT NULL CHECK(conflict BETWEEN 0 AND 1),
+      reason TEXT NOT NULL, source_message_id TEXT REFERENCES messages(id),
+      rule_version TEXT NOT NULL, recorded_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS relationship_states_current
+      ON relationship_states(character_id, recorded_at DESC);
+    CREATE TABLE IF NOT EXISTS personality_states (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      warmth REAL NOT NULL CHECK(warmth BETWEEN 0 AND 1),
+      energy REAL NOT NULL CHECK(energy BETWEEN 0 AND 1),
+      reserve REAL NOT NULL CHECK(reserve BETWEEN 0 AND 1),
+      playfulness REAL NOT NULL CHECK(playfulness BETWEEN 0 AND 1),
+      maturity REAL NOT NULL CHECK(maturity BETWEEN 0 AND 1),
+      rationality REAL NOT NULL CHECK(rationality BETWEEN 0 AND 1),
+      initiative REAL NOT NULL CHECK(initiative BETWEEN 0 AND 1),
+      reason TEXT NOT NULL, source_message_id TEXT REFERENCES messages(id),
+      rule_version TEXT NOT NULL, recorded_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS personality_states_current
+      ON personality_states(character_id, recorded_at DESC);
+    CREATE TABLE IF NOT EXISTS personality_evidence (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      trait TEXT NOT NULL,
+      direction INTEGER NOT NULL CHECK(direction IN (-1, 1)),
+      source_message_id TEXT NOT NULL REFERENCES messages(id),
+      reason TEXT NOT NULL, recorded_at TEXT NOT NULL,
+      UNIQUE(character_id, trait, source_message_id)
+    );
+    CREATE TABLE IF NOT EXISTS reflections (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id),
+      trigger_message_id TEXT NOT NULL REFERENCES messages(id),
+      summary TEXT NOT NULL,
+      importance REAL NOT NULL CHECK(importance BETWEEN 0 AND 1),
+      rule_version TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS reflections_character_recent
+      ON reflections(character_id, created_at DESC);
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

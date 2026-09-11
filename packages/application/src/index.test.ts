@@ -33,4 +33,10 @@ describe('assembleChatContext', () => {
     expect(result[1]?.content).toContain('有原始消息证据');
     expect(result[1]?.content).toContain('我喜欢咖啡');
   });
+
+  it('projects cognition without exposing internal values', () => {
+    const result = assembleChatContext(character, [], 100, [], '心情平稳；正在逐渐熟悉彼此');
+    expect(result[1]?.content).toContain('当前连续状态');
+    expect(result[1]?.content).not.toContain('0.');
+  });
 });

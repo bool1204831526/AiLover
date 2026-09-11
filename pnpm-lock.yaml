@@ -36,6 +36,9 @@ importers:
       '@ailover/application':
         specifier: workspace:*
         version: link:packages/application
+      '@ailover/cognition':
+        specifier: workspace:*
+        version: link:packages/cognition
       '@ailover/contracts':
         specifier: workspace:*
         version: link:packages/contracts
@@ -114,6 +117,12 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
+  packages/cognition:
+    dependencies:
+      '@ailover/domain':
+        specifier: workspace:*
+        version: link:../domain
+
   packages/contracts: {}
 
   packages/domain: {}
@@ -133,6 +142,9 @@ importers:
       '@ailover/application':
         specifier: workspace:*
         version: link:../application
+      '@ailover/cognition':
+        specifier: workspace:*
+        version: link:../cognition
       '@ailover/domain':
         specifier: workspace:*
         version: link:../domain

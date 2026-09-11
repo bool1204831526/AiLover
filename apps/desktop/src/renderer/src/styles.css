@@ -621,6 +621,70 @@ button:disabled {
   overflow-y: auto;
 }
 
+.relationship-page {
+  min-height: 0;
+  padding: 30px 28px;
+  overflow-y: auto;
+}
+
+.relationship-empty {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
+  color: #85868a;
+  text-align: center;
+}
+
+.relationship-empty p {
+  max-width: 330px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.relationship-summary {
+  width: min(100%, 620px);
+  padding-top: 8px;
+}
+
+.relationship-summary h3 {
+  margin: 7px 0 10px;
+  color: #303236;
+  font-size: 23px;
+}
+
+.relationship-summary > p {
+  margin: 0;
+  color: #66686c;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.relationship-mood {
+  display: grid;
+  gap: 6px;
+  margin: 26px 0 14px;
+  padding: 15px 16px;
+  color: #5e5658;
+  background: #f1edeb;
+  border-left: 3px solid #bc6a76;
+}
+
+.relationship-mood strong {
+  color: #8b4c56;
+  font-size: 11px;
+}
+
+.relationship-mood span {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.relationship-summary small {
+  color: #969397;
+  font-size: 10px;
+}
+
 .settings-section {
   display: grid;
   gap: 18px;

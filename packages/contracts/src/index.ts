@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
   chatStream: 'chat:stream',
+  relationshipGetSummary: 'relationship:get-summary',
 } as const;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
@@ -83,6 +84,14 @@ export const ChatStreamEventSchema = z.discriminatedUnion('type', [
     error: z.string().min(1), retryable: z.boolean() }),
 ]);
 export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
+
+export const RelationshipSummarySchema = z.object({
+  headline: z.string().min(1),
+  description: z.string().min(1),
+  mood: z.string().min(1),
+  updatedAt: z.iso.datetime(),
+});
+export type RelationshipSummary = z.infer<typeof RelationshipSummarySchema>;
 
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
@@ -160,6 +169,9 @@ export interface AiLoverDesktopApi {
     send(input: ChatSendInput): Promise<ChatSendReceipt>;
     cancel(requestId: string): Promise<void>;
     onStream(listener: (event: ChatStreamEvent) => void): () => void;
+  };
+  relationship: {
+    getSummary(): Promise<RelationshipSummary | null>;
   };
 }
 

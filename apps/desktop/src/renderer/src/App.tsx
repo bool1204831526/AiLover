@@ -5,7 +5,7 @@ import {
 
 import type {
   BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
-  ModelConnectionResult, ModelProfileInput,
+  ModelConnectionResult, ModelProfileInput, RelationshipSummary,
 } from '@ailover/contracts';
 
 const navigation = [
@@ -81,7 +81,8 @@ export function App(): React.JSX.Element {
       </div>}
     </section>
     <section className="conversation-panel">
-      {activeSection === 'settings' ? <ModelSettings /> : <>
+      {activeSection === 'settings' ? <ModelSettings /> : activeSection === 'relationship'
+        ? <RelationshipView character={character} /> : <>
         <header className="conversation-header"><div><span className="eyebrow">当前对话</span>
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
@@ -92,6 +93,30 @@ export function App(): React.JSX.Element {
     {creatorOpen && <CharacterCreator draft={draft} saving={saving} error={error} onChange={setDraft}
       onClose={() => setCreatorOpen(false)} onSubmit={submitCharacter} />}
   </main>;
+}
+
+function RelationshipView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
+  const [summary, setSummary] = useState<RelationshipSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSummary(null);
+    setFailed(false);
+    if (!character || !window.ailover) return;
+    void window.ailover.relationship.getSummary().then(setSummary).catch(() => setFailed(true));
+  }, [character?.id]);
+
+  return <><header className="conversation-header"><div><span className="eyebrow">你们的关系</span>
+    <h2>{character ? `你与${character.name}` : '尚未相遇'}</h2></div></header>
+    <div className="relationship-page">{!character ? <div className="relationship-empty">
+      <Heart size={28} strokeWidth={1.5} aria-hidden="true" /><p>创建角色后，这里会记录你们关系的变化。</p>
+    </div> : failed ? <div className="relationship-empty"><p>暂时无法读取关系状态。</p></div>
+      : summary ? <section className="relationship-summary">
+        <span className="profile-kicker">当前关系</span><h3>{summary.headline}</h3>
+        <p>{summary.description}</p><div className="relationship-mood"><strong>此刻的相处</strong>
+          <span>{summary.mood}</span></div>
+        <small>更新于 {new Date(summary.updatedAt).toLocaleString('zh-CN')}</small>
+      </section> : <div className="relationship-empty"><p>正在整理你们的相处状态…</p></div>}</div></>;
 }
 
 function ChatView({ character, bootstrapError }: {

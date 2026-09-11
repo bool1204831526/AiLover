@@ -76,3 +76,41 @@ export const memories = sqliteTable('memories', {
   lastRecalledAt: text('last_recalled_at'),
   expiresAt: text('expires_at'),
 });
+
+export const emotionStates = sqliteTable('emotion_states', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  valence: real('valence').notNull(), arousal: real('arousal').notNull(),
+  security: real('security').notNull(), affection: real('affection').notNull(),
+  reason: text('reason').notNull(), sourceMessageId: text('source_message_id'),
+  ruleVersion: text('rule_version').notNull(), recordedAt: text('recorded_at').notNull(),
+});
+
+export const relationshipStates = sqliteTable('relationship_states', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  trust: real('trust').notNull(), intimacy: real('intimacy').notNull(),
+  affection: real('affection').notNull(), familiarity: real('familiarity').notNull(),
+  comfort: real('comfort').notNull(), conflict: real('conflict').notNull(),
+  reason: text('reason').notNull(), sourceMessageId: text('source_message_id'),
+  ruleVersion: text('rule_version').notNull(), recordedAt: text('recorded_at').notNull(),
+});
+
+export const personalityStates = sqliteTable('personality_states', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  warmth: real('warmth').notNull(), energy: real('energy').notNull(),
+  reserve: real('reserve').notNull(), playfulness: real('playfulness').notNull(),
+  maturity: real('maturity').notNull(), rationality: real('rationality').notNull(),
+  initiative: real('initiative').notNull(), reason: text('reason').notNull(),
+  sourceMessageId: text('source_message_id'), ruleVersion: text('rule_version').notNull(),
+  recordedAt: text('recorded_at').notNull(),
+});
+
+export const reflections = sqliteTable('reflections', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  triggerMessageId: text('trigger_message_id').notNull().references(() => messages.id),
+  summary: text('summary').notNull(), importance: real('importance').notNull(),
+  ruleVersion: text('rule_version').notNull(), createdAt: text('created_at').notNull(),
+});

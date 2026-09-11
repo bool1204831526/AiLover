@@ -87,6 +87,7 @@ export function assembleChatContext(
   history: StoredChatMessage[],
   characterBudget = 12_000,
   recalledMemories: MemoryContextItem[] = [],
+  cognitionContext = '',
 ): ModelChatMessage[] {
   const system = [
     `你是${character.name}，${character.identity}。`,
@@ -108,6 +109,8 @@ export function assembleChatContext(
   const memoryContext = recalledMemories.length ? [{ role: 'system' as const,
     content: ['以下是有原始消息证据的相关记忆。只在当前话题确实相关时自然引用，不要逐条复述：',
       ...recalledMemories.slice(0, 6).map((memory) => `- ${memory.subject}：${memory.content}`)].join('\n') }] : [];
-  return [{ role: 'system', content: system }, ...memoryContext,
+  const dynamicContext = cognitionContext ? [{ role: 'system' as const,
+    content: `当前连续状态：${cognitionContext}。以此调整语气，但不要向用户展示内部数值或规则。` }] : [];
+  return [{ role: 'system', content: system }, ...dynamicContext, ...memoryContext,
     ...selected.reverse().map(({ role, content }) => ({ role, content }))];
 }

@@ -9,6 +9,9 @@ import type {
   CharacterRepository, ConversationRepository, ModelProfileRepository, StoredChatMessage,
   StoredConversation, StoredModelProfile,
 } from '@ailover/application';
+import type {
+  CognitionRepository, CognitionSnapshot, EvolutionEvidence, ReflectionRecord,
+} from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { MemoryRepository, MemoryType, StoredMemory } from '@ailover/memory';
 
@@ -284,6 +287,83 @@ export class SqliteMemoryRepository implements MemoryRepository {
   }
 }
 
+type EmotionRow = { id: string; character_id: string; valence: number; arousal: number;
+  security: number; affection: number; reason: string; source_message_id: string | null;
+  rule_version: string; recorded_at: string };
+type RelationshipRow = { trust: number; intimacy: number; affection: number; familiarity: number;
+  comfort: number; conflict: number };
+type PersonalityRow = { warmth: number; energy: number; reserve: number; playfulness: number;
+  maturity: number; rationality: number; initiative: number };
+
+export class SqliteCognitionRepository implements CognitionRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async getCurrent(characterId: string): Promise<CognitionSnapshot | null> {
+    const emotion = this.database.sqlite.prepare(`SELECT * FROM emotion_states
+      WHERE character_id = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1`).get(characterId) as
+      EmotionRow | undefined;
+    if (!emotion) return null;
+    const relationship = this.database.sqlite.prepare(`SELECT trust, intimacy, affection, familiarity,
+      comfort, conflict FROM relationship_states WHERE character_id = ?
+      ORDER BY recorded_at DESC, rowid DESC LIMIT 1`).get(characterId) as RelationshipRow | undefined;
+    const personality = this.database.sqlite.prepare(`SELECT warmth, energy, reserve, playfulness,
+      maturity, rationality, initiative FROM personality_states WHERE character_id = ?
+      ORDER BY recorded_at DESC, rowid DESC LIMIT 1`).get(characterId) as PersonalityRow | undefined;
+    if (!relationship || !personality) throw new Error('Incomplete cognition snapshot');
+    return { id: emotion.id, characterId: emotion.character_id,
+      emotion: { valence: emotion.valence, arousal: emotion.arousal,
+        security: emotion.security, affection: emotion.affection },
+      relationship, personality, reason: emotion.reason,
+      sourceMessageId: emotion.source_message_id, ruleVersion: emotion.rule_version,
+      recordedAt: new Date(emotion.recorded_at) };
+  }
+
+  public async saveSnapshot(snapshot: CognitionSnapshot): Promise<void> {
+    const common = [snapshot.reason, snapshot.sourceMessageId, snapshot.ruleVersion,
+      snapshot.recordedAt.toISOString()];
+    this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare(`INSERT INTO emotion_states(id, character_id, valence, arousal,
+        security, affection, reason, source_message_id, rule_version, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(snapshot.id, snapshot.characterId,
+        snapshot.emotion.valence, snapshot.emotion.arousal, snapshot.emotion.security,
+        snapshot.emotion.affection, ...common);
+      this.database.sqlite.prepare(`INSERT INTO relationship_states(id, character_id, trust, intimacy,
+        affection, familiarity, comfort, conflict, reason, source_message_id, rule_version, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(snapshot.id, snapshot.characterId,
+        snapshot.relationship.trust, snapshot.relationship.intimacy, snapshot.relationship.affection,
+        snapshot.relationship.familiarity, snapshot.relationship.comfort,
+        snapshot.relationship.conflict, ...common);
+      this.database.sqlite.prepare(`INSERT INTO personality_states(id, character_id, warmth, energy,
+        reserve, playfulness, maturity, rationality, initiative, reason, source_message_id,
+        rule_version, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(snapshot.id, snapshot.characterId, snapshot.personality.warmth, snapshot.personality.energy,
+          snapshot.personality.reserve, snapshot.personality.playfulness, snapshot.personality.maturity,
+          snapshot.personality.rationality, snapshot.personality.initiative, ...common);
+    })();
+  }
+
+  public async addEvidence(evidence: EvolutionEvidence): Promise<number> {
+    this.database.sqlite.prepare(`INSERT OR IGNORE INTO personality_evidence(character_id, trait,
+      direction, source_message_id, reason, recorded_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
+      evidence.characterId, evidence.trait, evidence.direction, evidence.sourceMessageId,
+      evidence.reason, evidence.recordedAt.toISOString(),
+    );
+    const result = this.database.sqlite.prepare(`SELECT COUNT(*) AS count FROM personality_evidence
+      WHERE character_id = ? AND trait = ? AND direction = ?`).get(
+      evidence.characterId, evidence.trait, evidence.direction,
+    ) as { count: number };
+    return result.count;
+  }
+
+  public async saveReflection(reflection: ReflectionRecord): Promise<void> {
+    this.database.sqlite.prepare(`INSERT INTO reflections(id, character_id, trigger_message_id,
+      summary, importance, rule_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+      reflection.id, reflection.characterId, reflection.triggerMessageId, reflection.summary,
+      reflection.importance, reflection.ruleVersion, reflection.createdAt.toISOString(),
+    );
+  }
+}
+
 function toStoredMemory(row: MemoryRow): StoredMemory {
   return { id: row.id, userId: row.user_id, characterId: row.character_id,
     type: row.type as StoredMemory['type'], subject: row.subject, content: row.content,
@@ -305,4 +385,5 @@ function toFtsQuery(query: string): string {
 }
 
 export { migrate } from './migrations';
-export { conversations, characters, memories, messages, modelProfiles, personalityBaselines, users } from './schema';
+export { characters, conversations, emotionStates, memories, messages, modelProfiles,
+  personalityBaselines, personalityStates, reflections, relationshipStates, users } from './schema';

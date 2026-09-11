@@ -7,15 +7,17 @@ import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
-  ModelProfileSnapshotSchema, type ChatStreamEvent,
+  ModelProfileSnapshotSchema, RelationshipSummarySchema, type ChatStreamEvent,
 } from '@ailover/contracts';
+import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
+  relationshipSummary } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, type StoredChatMessage, type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { ModelGatewayError, probeModelProvider, streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
-import { openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteMemoryRepository,
-  SqliteModelProfileRepository } from '@ailover/persistence';
+import { openAppDatabase, SqliteCharacterRepository, SqliteCognitionRepository,
+  SqliteConversationRepository, SqliteMemoryRepository, SqliteModelProfileRepository } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
 
@@ -46,6 +48,8 @@ const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
 const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
   idGenerator: { next: randomUUID } });
+const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
+  { next: randomUUID });
 const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 
@@ -199,6 +203,16 @@ function registerIpcHandlers(): void {
     if (typeof requestId !== 'string') throw new Error('无效的请求标识。');
     activeChats.get(requestId)?.abort();
   });
+
+  ipcMain.handle(IPC_CHANNELS.relationshipGetSummary, async () => {
+    const character = await characterService.findCurrent();
+    if (!character) return null;
+    const state = await cognitionService.getOrCreate(
+      character.id, character.personalityBaseline, new Date(),
+    );
+    const summary = relationshipSummary(state);
+    return RelationshipSummarySchema.parse({ ...summary, updatedAt: summary.updatedAt.toISOString() });
+  });
 }
 
 async function completeChat(
@@ -210,8 +224,6 @@ async function completeChat(
 ): Promise<void> {
   let content = '';
   try {
-    const profile = await modelProfileRepository.get();
-    if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
     const history = await conversationRepository.listMessages(assistantMessage.conversationId);
     let recalled: RecalledMemory[] = [];
     try {
@@ -220,9 +232,18 @@ async function completeChat(
     } catch (error) {
       logger.warn({ error }, 'Memory recall failed; continuing without recalled context');
     }
+    const cognition = await cognitionService.processInteraction({ characterId: character.id,
+      baseline: character.personalityBaseline, sourceMessageId: userMessage.id,
+      text: userMessage.content, now: userMessage.createdAt });
+    const responsePlan = createResponsePlan(cognition, analyzeInteraction(userMessage.content));
+    const cognitionContext = `${projectCognition(cognition)}；回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`;
+    const profile = await modelProfileRepository.get();
+    if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
     const apiKey = decryptApiKey(profile.encryptedApiKey);
     for await (const delta of streamModelChat({ provider: profile.provider, endpoint: profile.endpoint,
-      model: profile.model, messages: assembleChatContext(character, history, 12_000, recalled), signal,
+      model: profile.model, messages: assembleChatContext(
+        character, history, 12_000, recalled, cognitionContext,
+      ), signal,
       ...(apiKey ? { apiKey } : {}) })) {
       content += delta;
       emitChatEvent({ type: 'chunk', requestId, messageId: assistantMessage.id, delta });

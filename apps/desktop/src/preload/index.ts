@@ -12,6 +12,7 @@ import {
   ModelConnectionResultSchema,
   ModelProfileInputSchema,
   ModelProfileSnapshotSchema,
+  RelationshipSummarySchema,
   type AiLoverDesktopApi,
 } from '@ailover/contracts';
 
@@ -68,6 +69,12 @@ const api: AiLoverDesktopApi = {
       };
       ipcRenderer.on(IPC_CHANNELS.chatStream, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.chatStream, handler);
+    },
+  },
+  relationship: {
+    getSummary: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.relationshipGetSummary);
+      return result === null ? null : RelationshipSummarySchema.parse(result);
     },
   },
 };

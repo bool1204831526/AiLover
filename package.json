@@ -33,6 +33,7 @@
   "devDependencies": {
     "@ailover/application": "workspace:*",
     "@ailover/contracts": "workspace:*",
+    "@ailover/cognition": "workspace:*",
     "@ailover/domain": "workspace:*",
     "@ailover/memory": "workspace:*",
     "@ailover/model-gateway": "workspace:*",

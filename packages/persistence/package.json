@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@ailover/application": "workspace:*",
+    "@ailover/cognition": "workspace:*",
     "@ailover/domain": "workspace:*",
     "@ailover/memory": "workspace:*",
     "better-sqlite3": "^12.2.0",

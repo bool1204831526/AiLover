@@ -6,11 +6,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
+import { CognitionService } from '@ailover/cognition';
 import { MemoryService } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
-  SqliteMemoryRepository,
+  SqliteCognitionRepository, SqliteMemoryRepository,
 } from './index';
 
 const paths: string[] = [];
@@ -121,5 +122,47 @@ describe('SqliteMemoryRepository', () => {
     expect(database.sqlite.prepare('SELECT query_message_id FROM memory_recalls').get())
       .toEqual({ query_message_id: 'query-message' });
     database.close();
+  });
+});
+
+describe('SqliteCognitionRepository', () => {
+  it('restores bounded state and retains its source evidence across restarts', async () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const first = openAppDatabase(path);
+    const character = createCharacter({
+      name: '艾琳', gender: '女', ageSetting: '成年', identity: 'AI 伴侣', background: '',
+      appearance: '银白色长发', speakingStyle: '温柔', personalityTemplateId: 'gentle',
+    }, { idGenerator: { next: () => 'character-cognition' }, clock: { now: () => new Date() } });
+    await new SqliteCharacterRepository(first).save(character);
+    const conversations = new SqliteConversationRepository(first);
+    const at = new Date('2026-09-11T02:00:00Z');
+    await conversations.create({ id: 'conversation-cognition', characterId: character.id,
+      title: '状态测试', startedAt: at, lastMessageAt: at });
+    await conversations.saveMessage({ id: 'cognition-message', conversationId: 'conversation-cognition',
+      role: 'user', content: '告诉你一个秘密，我很喜欢你', status: 'completed', model: null, createdAt: at });
+    let snapshotId = 0;
+    const cognitionRepository = new SqliteCognitionRepository(first);
+    const service = new CognitionService(cognitionRepository,
+      { next: () => `snapshot-${++snapshotId}` });
+    const changed = await service.processInteraction({ characterId: character.id,
+      baseline: character.personalityBaseline, sourceMessageId: 'cognition-message',
+      text: '告诉你一个秘密，我很喜欢你', now: at });
+    expect(changed.relationship.trust).toBeLessThanOrEqual(0.42);
+    expect(await cognitionRepository.addEvidence({ characterId: character.id, trait: 'initiative',
+      direction: 1, sourceMessageId: 'cognition-message', reason: 'test evidence', recordedAt: at })).toBe(1);
+    expect(await cognitionRepository.addEvidence({ characterId: character.id, trait: 'initiative',
+      direction: 1, sourceMessageId: 'cognition-message', reason: 'duplicate', recordedAt: at })).toBe(1);
+    first.close();
+
+    const second = openAppDatabase(path);
+    const restored = await new SqliteCognitionRepository(second).getCurrent(character.id);
+    expect(restored?.sourceMessageId).toBe('cognition-message');
+    expect(restored?.relationship.intimacy).toBeGreaterThan(0.2);
+    expect(second.sqlite.prepare('SELECT rule_version FROM relationship_states').get())
+      .toEqual({ rule_version: 'cognition-v1' });
+    expect(second.sqlite.prepare('SELECT trigger_message_id FROM reflections').get())
+      .toEqual({ trigger_message_id: 'cognition-message' });
+    second.close();
   });
 });
