@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  Check, ChevronLeft, DatabaseBackup, Download, Heart, Image, MessageCircle, RotateCcw,
-  SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Upload, UserRound, X,
+  Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
+  RotateCcw, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
+  UserRound, X,
 } from 'lucide-react';
 
 import type {
@@ -445,8 +446,10 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
   const [hasSavedKey, setHasSavedKey] = useState(false);
   const [result, setResult] = useState<ModelConnectionResult | null>(null);
   const [busy, setBusy] = useState<'test' | 'save' | null>(null);
-  const [dataBusy, setDataBusy] = useState<'export' | 'restore' | null>(null);
+  const [dataBusy, setDataBusy] = useState<'export' | 'restore' | 'diagnostics' | 'delete' | null>(null);
   const [dataResult, setDataResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   useEffect(() => {
     const api = window.ailover;
@@ -512,6 +515,29 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
     finally { setDataBusy(null); }
   }
 
+  async function exportDiagnostics(): Promise<void> {
+    setDataBusy('diagnostics');
+    setDataResult(null);
+    try {
+      const result = window.ailover ? await window.ailover.data.exportDiagnostics()
+        : { ok: true as const, message: '预览模式：诊断导出已取消', fileName: '', requiresRestart: false };
+      if (result) setDataResult({ ok: true, message: result.message });
+    } catch { setDataResult({ ok: false, message: '诊断信息导出失败。' }); }
+    finally { setDataBusy(null); }
+  }
+
+  async function deleteAllData(): Promise<void> {
+    if (deleteConfirmation !== '删除全部数据') return;
+    setDataBusy('delete');
+    setDataResult(null);
+    try {
+      const result = window.ailover
+        ? await window.ailover.data.deleteAll({ confirmation: '删除全部数据' }) : null;
+      if (result) setDataResult({ ok: true, message: result.message });
+    } catch { setDataResult({ ok: false, message: '本地数据删除失败，应用将重新启动以检查数据状态。' }); }
+    finally { setDataBusy(null); }
+  }
+
   return <><header className="conversation-header"><div><span className="eyebrow">应用设置</span>
     <h2>模型服务</h2></div></header><div className="settings-page"><section className="settings-section">
       <div className="settings-heading"><h3>聊天模型</h3><p>选择本地模型，或连接兼容 OpenAI API 的服务。</p></div>
@@ -545,7 +571,22 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
         {dataBusy === 'export' ? '正在导出' : '导出完整备份'}</button>
         <button className="secondary-action" type="button" disabled={dataBusy !== null}
           onClick={() => void restoreBackup()}><DatabaseBackup size={16} aria-hidden="true" />
-          {dataBusy === 'restore' ? '正在验证' : '从备份恢复'}</button></div>
+          {dataBusy === 'restore' ? '正在验证' : '从备份恢复'}</button>
+        <button className="secondary-action" type="button" disabled={dataBusy !== null}
+          onClick={() => void exportDiagnostics()}><FileJson size={16} aria-hidden="true" />
+          {dataBusy === 'diagnostics' ? '正在整理' : '导出诊断信息'}</button></div>
+    </section><section className="settings-section danger-settings">
+      <div className="settings-heading"><h3>删除本地数据</h3>
+        <p>永久删除这台电脑上的角色、聊天记录、记忆、模型配置和角色图片。</p></div>
+      {!deleteArmed ? <button className="danger-action" type="button" disabled={dataBusy !== null}
+        onClick={() => setDeleteArmed(true)}><Trash2 size={16} aria-hidden="true" />删除全部数据</button>
+        : <div className="delete-confirmation"><label><span>输入“删除全部数据”以继续</span>
+          <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} /></label>
+          <div><button className="secondary-action" type="button" onClick={() => {
+            setDeleteArmed(false); setDeleteConfirmation('');
+          }}>取消</button><button className="danger-action" type="button"
+            disabled={dataBusy !== null || deleteConfirmation !== '删除全部数据'}
+            onClick={() => void deleteAllData()}>{dataBusy === 'delete' ? '正在删除' : '永久删除'}</button></div></div>}
     </section></div></>;
 }
 

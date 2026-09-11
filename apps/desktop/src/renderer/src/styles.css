@@ -1152,6 +1152,39 @@ button:disabled {
   align-items: center;
 }
 
+.danger-settings {
+  padding-top: 26px;
+  border-top: 1px solid #e1ddd7;
+}
+
+.danger-action {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  width: fit-content;
+  min-height: 38px;
+  padding: 0 14px;
+  color: #fff;
+  background: #a63f4e;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 650;
+}
+
+.delete-confirmation {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  background: #f6eeee;
+  border-left: 3px solid #b94f5e;
+}
+
+.delete-confirmation > div {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 68px minmax(220px, 34%) minmax(390px, 1fr);

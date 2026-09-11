@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { arch, release } from 'node:os';
 import { basename, extname, join, resolve, sep } from 'node:path';
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
@@ -10,7 +11,7 @@ import {
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
-  DataOperationResultSchema, ImageCapabilitiesSchema, type ChatStreamEvent,
+  DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, type ChatStreamEvent,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
@@ -21,7 +22,7 @@ import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
-import { createSanitizedDatabaseSnapshot, openAppDatabase, prepareRestoredDatabase,
+import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
   SqliteMemoryRepository, SqliteModelProfileRepository, validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
@@ -48,6 +49,8 @@ if (isSmokeTest) {
 
 const config = loadAppConfig();
 const logger = createLogger({ level: config.logLevel, environment: config.environment });
+const processStartedAt = performance.now();
+let startupDurationMs: number | null = null;
 let smokeTestCompleted = false;
 const userDataPath = app.getPath('userData');
 const databasePath = join(userDataPath, 'data', 'ailover.sqlite');
@@ -387,6 +390,59 @@ function registerIpcHandlers(): void {
       return result;
     } finally { await rm(temporary, { recursive: true, force: true }); }
   });
+
+  ipcMain.handle(IPC_CHANNELS.dataExportDiagnostics, async () => {
+    if (!mainWindow) return null;
+    const destination = await dialog.showSaveDialog(mainWindow, { title: '导出诊断信息',
+      defaultPath: join(app.getPath('documents'), `AiLover-diagnostics-${new Date().toISOString().slice(0, 10)}.json`),
+      filters: [{ name: 'JSON 诊断文件', extensions: ['json'] }] });
+    if (destination.canceled || !destination.filePath) return null;
+    const counts = Object.fromEntries(['characters', 'conversations', 'messages', 'memories',
+      'emotion_states', 'relationship_states', 'assets'].map((table) => {
+      const row = database.sqlite.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+      return [table, row.count];
+    }));
+    const modelProfile = await modelProfileRepository.get();
+    const databaseSize = (await stat(databasePath)).size;
+    const document = {
+      format: 'ailover-diagnostics', version: 1, createdAt: new Date().toISOString(),
+      application: { version: app.getVersion(), environment: config.environment,
+        platform: process.platform, architecture: arch(), osRelease: release(),
+        electronVersion: process.versions.electron, nodeVersion: process.versions.node,
+        startupDurationMs },
+      database: { schemaVersion: CURRENT_SCHEMA_VERSION, sizeBytes: databaseSize,
+        integrity: (database.sqlite.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check,
+        recordCounts: counts },
+      configuration: { modelConfigured: Boolean(modelProfile), provider: modelProfile?.provider ?? null },
+      privacy: { conversationBodiesIncluded: false, memoryBodiesIncluded: false,
+        credentialsIncluded: false, localPathsIncluded: false },
+    };
+    await writeFile(destination.filePath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    return DataOperationResultSchema.parse({ ok: true,
+      message: '诊断信息已导出，不包含对话正文、记忆正文、密钥或本地路径。',
+      fileName: basename(destination.filePath), requiresRestart: false });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.dataDeleteAll, async (_event, input: unknown) => {
+    DeleteAllDataInputSchema.parse(input);
+    if (!mainWindow) throw new Error('主窗口不可用。');
+    const confirmation = await dialog.showMessageBox(mainWindow, { type: 'warning',
+      title: '永久删除本地数据', message: '此操作无法撤销。',
+      detail: '角色、聊天记录、记忆、关系状态、模型配置和本地角色图都会被删除。外部备份文件不会删除。',
+      buttons: ['取消', '永久删除'], defaultId: 0, cancelId: 0, noLink: true });
+    if (confirmation.response !== 1) return null;
+    for (const controller of activeChats.values()) controller.abort();
+    database.close();
+    try {
+      await rm(databasePath, { force: true });
+      await rm(`${databasePath}-wal`, { force: true });
+      await rm(`${databasePath}-shm`, { force: true });
+      await rm(assetRoot, { recursive: true, force: true });
+      await rm(join(userDataPath, 'logs'), { recursive: true, force: true });
+    } finally { restartApplication(); }
+    return DataOperationResultSchema.parse({ ok: true, message: '全部本地数据已删除，AiLover 正在重新启动。',
+      fileName: '本地数据', requiresRestart: true });
+  });
 }
 
 async function completeChat(
@@ -486,6 +542,7 @@ function createMainWindow(): BrowserWindow {
 void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
+  startupDurationMs = Math.round(performance.now() - processStartedAt);
   logger.info({ appVersion: app.getVersion() }, 'AiLover started');
   const character = await characterService.findCurrent();
   if (character) {

@@ -17,6 +17,8 @@ export const IPC_CHANNELS = {
   imageCapabilitiesGet: 'image-capabilities:get',
   dataExportBackup: 'data:export-backup',
   dataRestoreBackup: 'data:restore-backup',
+  dataExportDiagnostics: 'data:export-diagnostics',
+  dataDeleteAll: 'data:delete-all',
 } as const;
 
 export const ModelProviderSchema = z.enum(['openai-compatible', 'ollama']);
@@ -138,6 +140,11 @@ export const DataOperationResultSchema = z.object({
 });
 export type DataOperationResult = z.infer<typeof DataOperationResultSchema>;
 
+export const DeleteAllDataInputSchema = z.object({
+  confirmation: z.literal('删除全部数据'),
+}).strict();
+export type DeleteAllDataInput = z.infer<typeof DeleteAllDataInputSchema>;
+
 export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
 ]);
@@ -229,6 +236,8 @@ export interface AiLoverDesktopApi {
   data: {
     exportBackup(): Promise<DataOperationResult | null>;
     restoreBackup(): Promise<DataOperationResult | null>;
+    exportDiagnostics(): Promise<DataOperationResult | null>;
+    deleteAll(input: DeleteAllDataInput): Promise<DataOperationResult | null>;
   };
 }
 
