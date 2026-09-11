@@ -1,6 +1,7 @@
 # MVP Release Checklist
 
 Run the complete local release gate with `pnpm release:verify`.
+GitHub runs the same gate from `.github/workflows/windows-quality.yml` once a remote is configured.
 
 ## Automated Gates
 
