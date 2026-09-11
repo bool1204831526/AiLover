@@ -181,6 +181,9 @@ export const BootstrapResponseSchema = z.object({
     chat: z.boolean(),
     memory: z.boolean(),
   }),
+  setup: z.object({
+    modelConfigured: z.boolean(),
+  }),
   currentCharacter: CharacterSnapshotSchema.nullable(),
 });
 

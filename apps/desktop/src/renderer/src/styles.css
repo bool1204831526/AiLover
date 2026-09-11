@@ -264,6 +264,10 @@ button:disabled {
   line-height: 1.65;
 }
 
+.empty-action {
+  margin-top: 18px;
+}
+
 .message-list {
   min-height: 0;
   padding: 24px 26px 12px;
@@ -634,6 +638,247 @@ button:disabled {
   font-size: 12px;
 }
 
+.onboarding-shell {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  color: #292b2f;
+  background: #fbfaf8;
+  grid-template-columns: 210px minmax(0, 1fr);
+}
+
+.onboarding-progress {
+  padding: 24px 18px;
+  color: #f7f7f4;
+  background: #25272b;
+}
+
+.onboarding-progress ol {
+  display: grid;
+  gap: 8px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-progress li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #96999d;
+  font-size: 12px;
+}
+
+.onboarding-progress li > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid #55585d;
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+.onboarding-progress li.active,
+.onboarding-progress li.complete {
+  color: #fff;
+}
+
+.onboarding-progress li.active > span {
+  color: #25272b;
+  background: #f1a7ad;
+  border-color: #f1a7ad;
+}
+
+.onboarding-progress li.complete > span {
+  color: #fff;
+  background: #597a69;
+  border-color: #597a69;
+}
+
+.onboarding-content {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  padding: 42px clamp(30px, 7vw, 90px);
+  overflow-y: auto;
+  align-content: start;
+  grid-template-rows: minmax(min-content, 1fr);
+}
+
+.onboarding-back {
+  position: fixed;
+  z-index: 1;
+  top: 24px;
+  margin-left: -9px;
+}
+
+.onboarding-intro,
+.onboarding-form,
+.onboarding-confirm {
+  width: min(100%, 720px);
+  margin: auto;
+}
+
+.onboarding-intro {
+  display: grid;
+  justify-items: start;
+  align-self: center;
+}
+
+.onboarding-intro > svg {
+  margin-bottom: 22px;
+  color: #a94b59;
+}
+
+.onboarding-intro h1 {
+  max-width: 600px;
+  margin: 7px 0 14px;
+  font-size: 31px;
+  letter-spacing: 0;
+}
+
+.onboarding-intro p,
+.onboarding-form header p {
+  max-width: 620px;
+  margin: 0 0 25px;
+  color: #686a6e;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.onboarding-form {
+  display: grid;
+  gap: 17px;
+  padding: 32px 0;
+}
+
+.onboarding-form header h2 {
+  margin: 5px 0 7px;
+  font-size: 23px;
+}
+
+.onboarding-form header p {
+  margin-bottom: 0;
+}
+
+.onboarding-form label {
+  display: grid;
+  gap: 7px;
+  color: #4d4f53;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-form label small {
+  color: #898a8d;
+  font-weight: 400;
+}
+
+.onboarding-form input,
+.onboarding-form textarea {
+  width: 100%;
+  padding: 10px 11px;
+  color: #2e3034;
+  background: #fff;
+  border: 1px solid #d9d5cf;
+  border-radius: 6px;
+  outline: none;
+  font-weight: 400;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.onboarding-form input:focus,
+.onboarding-form textarea:focus {
+  border-color: #b96572;
+  box-shadow: 0 0 0 3px rgb(185 79 94 / 10%);
+}
+
+.onboarding-form fieldset {
+  padding: 0;
+  border: 0;
+}
+
+.onboarding-form legend {
+  margin-bottom: 8px;
+  color: #4d4f53;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-form footer {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  padding-top: 7px;
+}
+
+.text-action {
+  min-height: 38px;
+  margin-right: auto;
+  padding: 0 8px;
+  color: #727478;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.onboarding-confirm {
+  display: grid;
+  justify-items: center;
+  max-width: 520px;
+  align-self: center;
+  text-align: center;
+}
+
+.onboarding-confirm .portrait-ring {
+  margin-top: 16px;
+}
+
+.onboarding-confirm h2 {
+  margin: 0 0 5px;
+  font-size: 27px;
+}
+
+.onboarding-confirm > p {
+  margin: 0;
+  color: #696b6e;
+  font-size: 13px;
+}
+
+.onboarding-confirm dl {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin: 2px 0 22px;
+  text-align: left;
+}
+
+.onboarding-confirm dl div {
+  padding: 11px 13px;
+  background: #f0ede8;
+  border-left: 2px solid #c87983;
+}
+
+.onboarding-confirm dt {
+  margin-bottom: 4px;
+  color: #8a6a6e;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.onboarding-confirm dd {
+  margin: 0;
+  color: #56585c;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .settings-page {
   padding: 28px;
   overflow-y: auto;
@@ -922,5 +1167,28 @@ button:disabled {
 
   .visual-asset-section {
     grid-template-columns: 1fr;
+  }
+
+  .onboarding-shell {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+
+  .onboarding-progress {
+    padding: 18px 10px;
+  }
+
+  .onboarding-progress .brand-mark > span:last-child,
+  .onboarding-progress li:not(.active) {
+    display: none;
+  }
+
+  .onboarding-progress li {
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .onboarding-content {
+    padding: 56px 20px 28px;
   }
 }

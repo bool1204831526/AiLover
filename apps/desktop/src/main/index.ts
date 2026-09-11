@@ -145,6 +145,7 @@ function registerIpcHandlers(): void {
         chat: true,
         memory: true,
       },
+      setup: { modelConfigured: Boolean(await modelProfileRepository.get()) },
       currentCharacter: current ? toCharacterSnapshot(current) : null,
     });
 

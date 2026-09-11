@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  Heart, Image, MessageCircle, RotateCcw, SendHorizontal, Settings, SlidersHorizontal, Square,
-  Upload, UserRound, X,
+  Check, ChevronLeft, Heart, Image, MessageCircle, RotateCcw, SendHorizontal, Settings,
+  ShieldCheck, SlidersHorizontal, Square, Upload, UserRound, X,
 } from 'lucide-react';
 
 import type {
@@ -36,18 +36,22 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('chat');
   const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     const api = window.ailover;
     if (!api) {
       setBootstrap({ appVersion: 'preview', platform: 'win32', environment: 'development',
         dataPath: 'browser-preview', capabilities: { character: true, chat: false, memory: false },
+        setup: { modelConfigured: false },
         currentCharacter: null });
+      setOnboardingOpen(true);
       return;
     }
     void api.bootstrap().then((result) => {
       setBootstrap(result);
       setCharacter(result.currentCharacter);
+      setOnboardingOpen(!result.currentCharacter);
     }).catch(() => setError('应用初始化失败，请重新启动。'));
   }, []);
 
@@ -65,6 +69,7 @@ export function App(): React.JSX.Element {
       const created = window.ailover ? await window.ailover.character.create(draft) : previewCharacter(draft);
       setCharacter(created);
       setCreatorOpen(false);
+      setOnboardingOpen(false);
     } catch {
       setError('角色创建失败，请检查填写内容后重试。');
     } finally {
@@ -90,7 +95,9 @@ export function App(): React.JSX.Element {
       </div>}
     </section>
     <section className="conversation-panel">
-      {activeSection === 'settings' ? <ModelSettings /> : activeSection === 'relationship'
+      {activeSection === 'settings' ? <ModelSettings onSaved={() =>
+        setBootstrap((current) => current ? { ...current, setup: { modelConfigured: true } } : current)} />
+        : activeSection === 'relationship'
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
             onCreate={() => setCreatorOpen(true)} /> : <>
@@ -98,11 +105,21 @@ export function App(): React.JSX.Element {
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
             <SlidersHorizontal aria-hidden="true" size={19} /></button></header>
-        <ChatView character={character} bootstrapError={error} />
+        <ChatView character={character} bootstrapError={error}
+          modelConfigured={bootstrap?.setup.modelConfigured ?? false}
+          onOpenSettings={() => setActiveSection('settings')} />
       </>}
     </section>
     {creatorOpen && <CharacterCreator draft={draft} saving={saving} error={error} onChange={setDraft}
       onClose={() => setCreatorOpen(false)} onSubmit={submitCharacter} />}
+    {onboardingOpen && bootstrap && <Onboarding initialDraft={draft}
+      initialModelConfigured={bootstrap.setup.modelConfigured} onDraftChange={setDraft}
+      onComplete={(created, modelConfigured) => {
+        setCharacter(created);
+        setBootstrap((current) => current ? { ...current, setup: { modelConfigured } } : current);
+        setOnboardingOpen(false);
+        setActiveSection('chat');
+      }} />}
   </main>;
 }
 
@@ -183,8 +200,9 @@ function RelationshipView({ character }: { character: CharacterSnapshot | null }
       </section> : <div className="relationship-empty"><p>正在整理你们的相处状态…</p></div>}</div></>;
 }
 
-function ChatView({ character, bootstrapError }: {
+function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }: {
   character: CharacterSnapshot | null; bootstrapError: string | null;
+  modelConfigured: boolean; onOpenSettings(): void;
 }): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -205,7 +223,9 @@ function ChatView({ character, bootstrapError }: {
     return window.ailover.chat.onStream((event) => handleStreamEvent(event));
   }, []);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [messages]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
 
   function handleStreamEvent(event: ChatStreamEvent): void {
     if (event.type === 'chunk') {
@@ -255,7 +275,8 @@ function ChatView({ character, bootstrapError }: {
     <div className={messages.length ? 'message-list' : 'empty-conversation'}>
       {!messages.length ? <><MessageCircle aria-hidden="true" size={30} strokeWidth={1.5} />
         <p>{bootstrapError ?? chatError ?? (character
-          ? `${character.name}已经准备好。说点什么，开始你们的第一段对话。`
+          ? modelConfigured ? `${character.name}已经准备好。说点什么，开始你们的第一段对话。`
+            : '角色已经准备好。配置聊天模型后，就可以开始对话。'
           : '创建角色后，即可开始你们的第一段对话。')}</p></> : messages.map((message) =>
         <article className={`message-row ${message.role}`} key={message.id}>
           <div className={`message-bubble ${message.status}`}>
@@ -267,21 +288,157 @@ function ChatView({ character, bootstrapError }: {
           </div>
         </article>)}
       <div ref={endRef} />
+      {!messages.length && character && !modelConfigured && <button className="secondary-action empty-action"
+        type="button" onClick={onOpenSettings}>前往模型设置</button>}
     </div>
     {messages.length > 0 && chatError && <div className="chat-notice" role="status">{chatError}</div>}
     <div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
-      disabled={!character} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
-      placeholder={character ? `给${character.name}发消息` : '先创建一位角色'} rows={1} maxLength={8000} />
+      disabled={!character || !modelConfigured} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
+      placeholder={!character ? '先创建一位角色' : modelConfigured ? `给${character.name}发消息` : '请先配置聊天模型'} rows={1} maxLength={8000} />
       {requestId ? <button aria-label="停止生成" title="停止生成" type="button"
         onClick={() => requestId !== 'pending' && void window.ailover?.chat.cancel(requestId)}>
         <Square size={16} fill="currentColor" aria-hidden="true" /></button>
-        : <button aria-label="发送消息" title="发送消息" disabled={!character || !draft.trim()} type="button"
+        : <button aria-label="发送消息" title="发送消息" disabled={!character || !modelConfigured || !draft.trim()} type="button"
           onClick={() => void sendText(draft)}><SendHorizontal size={18} aria-hidden="true" /></button>}
     </div>
   </>;
 }
 
-function ModelSettings(): React.JSX.Element {
+function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onComplete }: {
+  initialDraft: CharacterDraftInput; initialModelConfigured: boolean;
+  onDraftChange(draft: CharacterDraftInput): void;
+  onComplete(character: CharacterSnapshot, modelConfigured: boolean): void;
+}): React.JSX.Element {
+  const [step, setStep] = useState(initialModelConfigured ? 2 : 0);
+  const [profile, setProfile] = useState<ModelProfileInput>({
+    provider: 'openai-compatible', endpoint: 'https://api.openai.com/v1', model: 'gpt-4.1-mini',
+  });
+  const [modelConfigured, setModelConfigured] = useState(initialModelConfigured);
+  const [modelResult, setModelResult] = useState<ModelConnectionResult | null>(null);
+  const [busy, setBusy] = useState<'model' | 'character' | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const draft = initialDraft;
+  const complete = Boolean(draft.name.trim() && draft.identity.trim()
+    && draft.appearance.trim() && draft.speakingStyle.trim());
+  const update = <K extends keyof CharacterDraftInput>(key: K, value: CharacterDraftInput[K]) =>
+    onDraftChange({ ...draft, [key]: value });
+
+  const updateProvider = (provider: ModelProfileInput['provider']) => {
+    setModelResult(null);
+    setProfile({ provider,
+      endpoint: provider === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1',
+      model: provider === 'ollama' ? 'qwen3:8b' : 'gpt-4.1-mini' });
+  };
+
+  async function saveModel(): Promise<void> {
+    setBusy('model');
+    setSetupError(null);
+    try {
+      if (window.ailover) await window.ailover.modelProfile.save(profile);
+      setModelConfigured(true);
+      setStep(2);
+    } catch { setSetupError('模型配置无法保存，请检查填写内容。'); }
+    finally { setBusy(null); }
+  }
+
+  async function testModel(): Promise<void> {
+    setBusy('model');
+    setSetupError(null);
+    try {
+      setModelResult(window.ailover ? await window.ailover.modelProfile.test(profile)
+        : { ok: true, latencyMs: 42, models: [profile.model], message: '预览模式：配置格式有效' });
+    } catch { setModelResult({ ok: false, latencyMs: 0, models: [], message: '无法连接模型服务' }); }
+    finally { setBusy(null); }
+  }
+
+  async function createFromDraft(): Promise<void> {
+    if (!complete) return;
+    setBusy('character');
+    setSetupError(null);
+    try {
+      const character = window.ailover
+        ? await window.ailover.character.create(draft) : previewCharacter(draft);
+      onComplete(character, modelConfigured);
+    } catch { setSetupError('角色创建失败，请返回检查角色设定。'); }
+    finally { setBusy(null); }
+  }
+
+  return <div className="onboarding-shell" role="dialog" aria-modal="true" aria-label="首次设置">
+    <aside className="onboarding-progress"><div className="brand-mark"><span className="brand-symbol">A</span>
+      <span>AiLover</span></div><ol>{['开始', '模型', '角色', '确认'].map((label, index) =>
+        <li className={index === step ? 'active' : index < step ? 'complete' : ''} key={label}>
+          <span>{index < step ? <Check size={13} aria-hidden="true" /> : index + 1}</span>{label}</li>)}</ol></aside>
+    <section className="onboarding-content">
+      {step > 0 && <button className="icon-button onboarding-back" type="button" aria-label="返回上一步"
+        title="返回上一步" onClick={() => setStep((current) => Math.max(0, current - 1))}>
+        <ChevronLeft size={19} aria-hidden="true" /></button>}
+      {step === 0 && <div className="onboarding-intro"><ShieldCheck size={36} strokeWidth={1.4} aria-hidden="true" />
+        <span className="eyebrow">欢迎使用 AiLover</span><h1>从一次只属于你的相遇开始</h1>
+        <p>角色资料、聊天记录与关系状态默认保存在这台电脑上。使用在线模型时，只有生成回复所需的内容会发送给你配置的服务。</p>
+        <button className="primary-action" type="button" onClick={() => setStep(1)}>开始设置</button></div>}
+      {step === 1 && <div className="onboarding-form"><header><span className="eyebrow">聊天模型</span>
+        <h2>连接你的模型服务</h2><p>也可以暂时跳过，角色和本地资料仍会正常保存。</p></header>
+        <div className="provider-switch" aria-label="模型提供方">
+          <button className={profile.provider === 'openai-compatible' ? 'selected' : ''} type="button"
+            onClick={() => updateProvider('openai-compatible')}>OpenAI Compatible</button>
+          <button className={profile.provider === 'ollama' ? 'selected' : ''} type="button"
+            onClick={() => updateProvider('ollama')}>Ollama</button></div>
+        <label><span>服务地址</span><input type="url" value={profile.endpoint}
+          onChange={(event) => setProfile({ ...profile, endpoint: event.target.value })} /></label>
+        <label><span>模型名称</span><input value={profile.model}
+          onChange={(event) => setProfile({ ...profile, model: event.target.value })} /></label>
+        {profile.provider === 'openai-compatible' && <label><span>API Key</span>
+          <input type="password" value={profile.apiKey ?? ''} placeholder="输入服务密钥"
+            onChange={(event) => setProfile({ ...profile, apiKey: event.target.value || undefined })} />
+          <small>密钥会由 Windows 加密后保存在本机。</small></label>}
+        {modelResult && <div className={modelResult.ok ? 'connection-result success' : 'connection-result error'}>
+          <strong>{modelResult.ok ? '连接状态正常' : '连接失败'}</strong><span>{modelResult.message}</span></div>}
+        {setupError && <p className="form-error">{setupError}</p>}
+        <footer><button className="text-action" type="button" onClick={() => setStep(2)}>稍后配置</button>
+          <button className="secondary-action" disabled={busy !== null} type="button"
+            onClick={() => void testModel()}>测试连接</button>
+          <button className="primary-action" disabled={busy !== null || !profile.endpoint || !profile.model}
+            type="button" onClick={() => void saveModel()}>{busy === 'model' ? '正在保存' : '保存并继续'}</button></footer>
+      </div>}
+      {step === 2 && <div className="onboarding-form"><header><span className="eyebrow">创建角色</span>
+        <h2>定义你们的第一次相遇</h2></header>
+        <div className="form-grid two-column"><label><span>名字</span><input required maxLength={40}
+          value={draft.name} placeholder="例如：艾琳" onChange={(event) => update('name', event.target.value)} /></label>
+          <label><span>年龄设定</span><input required maxLength={40} value={draft.ageSetting}
+            onChange={(event) => update('ageSetting', event.target.value)} /></label></div>
+        <fieldset><legend>人格基调</legend><div className="template-grid">{templates.map((template) =>
+          <button key={template.id} type="button"
+            className={draft.personalityTemplateId === template.id ? 'template-option selected' : 'template-option'}
+            onClick={() => update('personalityTemplateId', template.id)}><strong>{template.name}</strong>
+            <span>{template.description}</span></button>)}</div></fieldset>
+        <div className="form-grid two-column"><label><span>性别设定</span><input required maxLength={30}
+          value={draft.gender} onChange={(event) => update('gender', event.target.value)} /></label>
+          <label><span>身份</span><input required maxLength={500} value={draft.identity}
+            onChange={(event) => update('identity', event.target.value)} /></label></div>
+        <label><span>外貌</span><textarea required maxLength={2000} rows={3} value={draft.appearance}
+          onChange={(event) => update('appearance', event.target.value)} /></label>
+        <label><span>说话方式</span><textarea required maxLength={1000} rows={2} value={draft.speakingStyle}
+          onChange={(event) => update('speakingStyle', event.target.value)} /></label>
+        <label><span>背景故事 <small>可选</small></span><textarea maxLength={4000} rows={3}
+          value={draft.background} onChange={(event) => update('background', event.target.value)} /></label>
+        <footer><button className="primary-action" disabled={!complete} type="button"
+          onClick={() => setStep(3)}>确认角色</button></footer></div>}
+      {step === 3 && <div className="onboarding-confirm"><span className="eyebrow">最终确认</span>
+        <div className="portrait-ring portrait-created"><span>{draft.name.slice(0, 1)}</span></div>
+        <h2>{draft.name}</h2><p>{draft.identity}</p><div className="profile-tags">
+          <span>{templates.find(({ id }) => id === draft.personalityTemplateId)?.name}</span>
+          <span>{draft.gender}</span><span>{draft.ageSetting}</span></div>
+        <dl><div><dt>外貌</dt><dd>{draft.appearance}</dd></div>
+          <div><dt>说话方式</dt><dd>{draft.speakingStyle}</dd></div></dl>
+        {setupError && <p className="form-error">{setupError}</p>}
+        <button className="primary-action" disabled={busy !== null} type="button"
+          onClick={() => void createFromDraft()}>{busy === 'character' ? '正在创建' : `与${draft.name}见面`}</button>
+      </div>}
+    </section>
+  </div>;
+}
+
+function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
   const [profile, setProfile] = useState<ModelProfileInput>({
     provider: 'openai-compatible', endpoint: 'https://api.openai.com/v1', model: 'gpt-4.1-mini',
   });
@@ -326,6 +483,7 @@ function ModelSettings(): React.JSX.Element {
       }
       setProfile((current) => ({ provider: current.provider, endpoint: current.endpoint, model: current.model }));
       setResult({ ok: true, latencyMs: 0, models: [], message: '配置已安全保存' });
+      onSaved();
     } catch {
       setResult({ ok: false, latencyMs: 0, models: [], message: '无法保存配置' });
     } finally { setBusy(null); }
