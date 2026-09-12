@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  advanceFutureIntentions, buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -227,6 +227,13 @@ describe('EpisodicMemoryService', () => {
     expect(intentions[0]?.triggerType).toBe('return');
     expect(intentions[0]?.sourceMemoryIds).toEqual(['memory-plan']);
     expect(intentions[0]?.expiresAt?.toISOString()).toBe('2026-09-25T00:00:00.000Z');
+  });
+
+  it('advances intentions on return and expires stale ones', () => {
+    const plan: StoredMemory = { id: 'memory-plan', userId: 'local-user', characterId: 'character-1', type: 'plan', subject: '计划', content: '我下周要去面试', normalizedKey: 'plan', confidence: 0.9, importance: 0.7, emotionalWeight: 0.3, polarity: 'neutral', recallStrength: 1, reinforcementCount: 1, state: 'active', firstSeenAt: new Date('2026-09-11'), lastSeenAt: new Date('2026-09-11'), lastRecalledAt: null, expiresAt: new Date('2026-09-25'), evidence: '我下周要去面试' };
+    const intention = intentionsFromMemories([plan], { next: () => 'i-1' }, new Date('2026-09-12'))[0]!;
+    expect(advanceFutureIntentions([intention], new Date('2026-09-13'), { returned: true })[0]?.status).toBe('triggered');
+    expect(advanceFutureIntentions([intention], new Date('2026-09-26'), { returned: false })[0]?.status).toBe('expired');
   });
 
   it('builds a chronological relationship timeline from important episodes', () => {

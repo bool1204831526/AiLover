@@ -59,3 +59,7 @@
 # Explainable personality evidence
 
 - Added bounded summaries of trait evidence, including positive/negative counts and recent source messages.
+
+# Future intention lifecycle
+
+- Added deterministic return/keyword triggering and expiry transitions for generated intentions.

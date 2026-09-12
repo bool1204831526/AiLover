@@ -445,6 +445,23 @@ export function intentionsFromMemories(
     }));
 }
 
+export function advanceFutureIntentions(
+  intentions: FutureIntention[],
+  now: Date,
+  context?: { returned: boolean; text?: string },
+): FutureIntention[] {
+  const query = normalize(context?.text ?? '');
+  return intentions.map((intention) => {
+    if (intention.status !== 'pending') return intention;
+    if (intention.expiresAt && intention.expiresAt <= now) return { ...intention, status: 'expired' };
+    const keywordHit = intention.triggerData.keywords?.some((keyword) => query.includes(normalize(keyword)));
+    if (context?.returned && (intention.triggerType === 'return' || keywordHit)) {
+      return { ...intention, status: 'triggered' };
+    }
+    return intention;
+  });
+}
+
 export type RelationshipMilestone = {
   episodeId: string;
   occurredAt: Date;
