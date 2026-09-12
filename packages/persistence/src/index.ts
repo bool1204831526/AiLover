@@ -480,22 +480,49 @@ export class SqliteMemoryRepository implements MemoryRepository {
 
   public async listForCenter(characterId: string): Promise<StoredMemory[]> {
     return (this.database.sqlite.prepare(`SELECT * FROM memories
-      WHERE character_id = ? AND state IN ('active', 'expired') ORDER BY last_seen_at DESC`)
+      WHERE character_id = ? ORDER BY last_seen_at DESC`)
       .all(characterId) as MemoryRow[]).map(toStoredMemory);
   }
 
   public async getPrimarySource(characterId: string, memoryId: string): Promise<{
-    messageId: string; conversationId: string; excerpt: string; createdAt: Date;
+    messageId: string; conversationId: string; excerpt: string; evidence: string; createdAt: Date;
   } | null> {
-    const row = this.database.sqlite.prepare(`SELECT messages.id AS message_id,
-      messages.conversation_id, messages.content, messages.created_at
+    return (await this.getSources(characterId, memoryId, 1))[0] ?? null;
+  }
+
+  public async getSources(characterId: string, memoryId: string, limit = 20): Promise<{
+    messageId: string; conversationId: string; excerpt: string; evidence: string; createdAt: Date;
+  }[]> {
+    const rows = this.database.sqlite.prepare(`SELECT messages.id AS message_id,
+      messages.conversation_id, messages.content, memory_sources.evidence, memory_sources.created_at
       FROM memories JOIN memory_sources ON memory_sources.memory_id = memories.id
       JOIN messages ON messages.id = memory_sources.message_id
       WHERE memories.id = ? AND memories.character_id = ?
-      ORDER BY memory_sources.created_at ASC LIMIT 1`).get(memoryId, characterId) as
-      { message_id: string; conversation_id: string; content: string; created_at: string } | undefined;
-    return row ? { messageId: row.message_id, conversationId: row.conversation_id,
-      excerpt: row.content.slice(0, 180), createdAt: new Date(row.created_at) } : null;
+      ORDER BY memory_sources.created_at ASC LIMIT ?`).all(memoryId, characterId,
+      Math.max(1, Math.min(20, limit))) as { message_id: string; conversation_id: string;
+        content: string; evidence: string; created_at: string }[];
+    return rows.map((row) => ({ messageId: row.message_id, conversationId: row.conversation_id,
+      excerpt: row.content.slice(0, 180), evidence: row.evidence, createdAt: new Date(row.created_at) }));
+  }
+
+  public async getRelations(characterId: string, memoryId: string): Promise<{
+    memoryId: string; subject: string; content: string; state: StoredMemory['state'];
+    relation: 'contradicts' | 'supersedes'; direction: 'outgoing' | 'incoming';
+  }[]> {
+    const rows = this.database.sqlite.prepare(`SELECT related.id, related.subject, related.content,
+      related.state, memory_links.relation,
+      CASE WHEN memory_links.from_memory_id = anchor.id THEN 'outgoing' ELSE 'incoming' END AS direction
+      FROM memories AS anchor
+      JOIN memory_links ON anchor.id IN (memory_links.from_memory_id, memory_links.to_memory_id)
+      JOIN memories AS related ON related.id = CASE WHEN memory_links.from_memory_id = anchor.id
+        THEN memory_links.to_memory_id ELSE memory_links.from_memory_id END
+      WHERE anchor.id = ? AND anchor.character_id = ? AND related.character_id = ?
+      ORDER BY memory_links.created_at DESC LIMIT 20`).all(memoryId, characterId, characterId) as {
+        id: string; subject: string; content: string; state: StoredMemory['state'];
+        relation: 'contradicts' | 'supersedes'; direction: 'outgoing' | 'incoming';
+      }[];
+    return rows.map((row) => ({ memoryId: row.id, subject: row.subject, content: row.content,
+      state: row.state, relation: row.relation, direction: row.direction }));
   }
 
   public async updateStrength(id: string, strength: number, state: StoredMemory['state']): Promise<void> {

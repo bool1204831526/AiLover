@@ -22,6 +22,6 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 7. Relationship Timeline: completed; important Episode milestones are available through validated IPC and displayed chronologically in the relationship view.
 8. Emotional Association: completed; relevant past experiences now provide a small bounded emotional echo.
 9. Future Intention: completed; plans persist across restarts, trigger on a later conversation, expire locally and complete after a successful reply.
-10. Memory Center: in progress; users can inspect, search, filter, sort, correct and soft-delete memories with character-scoped handling.
+10. Memory Center: in progress; users can inspect, search, filter, sort, correct and soft-delete memories, review all evidence and reinforcement counts, and understand conflict, replacement and lifecycle state with character-scoped handling. Guided conflict resolution remains.
 
 Each phase must pass type checking, unit and integration tests before the next dependent phase begins.

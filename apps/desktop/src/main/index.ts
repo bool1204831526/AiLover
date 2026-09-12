@@ -481,13 +481,21 @@ function registerIpcHandlers(): void {
     if (!current) return [];
     const memories = await memoryRepository.listForCenter(current.id);
     return Promise.all(buildMemoryCenterEntries(memories).map(async (memory) => {
-      const source = await memoryRepository.getPrimarySource(current.id, memory.id);
-      const canRestore = memory.state === 'expired' &&
-        await memoryRepository.wasSoftDeleted(current.id, memory.id) &&
+      const [sources, relations, wasDeleted] = await Promise.all([
+        memoryRepository.getSources(current.id, memory.id),
+        memoryRepository.getRelations(current.id, memory.id),
+        memoryRepository.wasSoftDeleted(current.id, memory.id),
+      ]);
+      const source = sources[0] ?? null;
+      const lifecycle = memory.state === 'active' ? 'active' : memory.state === 'superseded'
+        ? 'superseded' : wasDeleted ? 'user-deleted' : 'naturally-expired';
+      const canRestore = memory.state === 'expired' && wasDeleted &&
         (!memory.expiresAt || memory.expiresAt > new Date());
       return { ...memory, firstSeenAt: memory.firstSeenAt.toISOString(),
         lastSeenAt: memory.lastSeenAt.toISOString(), expiresAt: memory.expiresAt?.toISOString() ?? null,
-        source: source ? { ...source, createdAt: source.createdAt.toISOString() } : null, canRestore };
+        source: source ? { ...source, createdAt: source.createdAt.toISOString() } : null,
+        sources: sources.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() })),
+        relations, lifecycle, canRestore };
     }));
   });
   ipcMain.handle(IPC_CHANNELS.memoryCorrect, async (_event, input: unknown) => {

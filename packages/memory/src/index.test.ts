@@ -122,8 +122,8 @@ it('builds a bounded memory center view without superseded entries', () => {
     polarity: 'positive', recallStrength: 1, reinforcementCount: 1, state,
     firstSeenAt: new Date(at), lastSeenAt: new Date(at), lastRecalledAt: null, expiresAt: null, evidence: id,
   });
-  const result = buildMemoryCenterEntries([make('old', 'active', '2026-09-01'), make('hidden', 'superseded', '2026-09-12'), make('new', 'active', '2026-09-11')], 1);
-  expect(result.map(({ id }) => id)).toEqual(['new']);
+  const result = buildMemoryCenterEntries([make('old', 'active', '2026-09-01'), make('replaced', 'superseded', '2026-09-12'), make('new', 'active', '2026-09-11')], 2);
+  expect(result.map(({ id }) => id)).toEqual(['replaced', 'new']);
 });
 
 it('corrects and safely deletes a memory without physical removal', () => {

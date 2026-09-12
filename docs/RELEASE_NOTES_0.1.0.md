@@ -75,6 +75,8 @@
 - Added keyword search, type/state filters, sorting and visibility for soft-deleted memories.
 - Added character-scoped source excerpts and direct navigation to the source conversation context.
 - Added audited undo for user-deleted memories while keeping naturally expired plans non-restorable.
+- Added expandable evidence history, reinforcement counts and character-scoped conflict/replacement links.
+- Distinguished active, naturally expired, user-deleted and superseded memory lifecycle states.
 
 # Consolidated memory persistence
 

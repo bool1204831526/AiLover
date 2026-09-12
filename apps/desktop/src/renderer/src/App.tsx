@@ -158,7 +158,7 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MemoryCenterEntry['type']>('all');
-  const [stateFilter, setStateFilter] = useState<'all' | MemoryCenterEntry['state']>('all');
+  const [stateFilter, setStateFilter] = useState<'all' | MemoryCenterEntry['lifecycle']>('all');
   const [sort, setSort] = useState<'recent' | 'important'>('recent');
   useEffect(() => {
     setEntries([]); setFailed(false);
@@ -168,7 +168,7 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
   const visibleEntries = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('zh-CN');
     return entries.filter((entry) => typeFilter === 'all' || entry.type === typeFilter)
-      .filter((entry) => stateFilter === 'all' || entry.state === stateFilter)
+      .filter((entry) => stateFilter === 'all' || entry.lifecycle === stateFilter)
       .filter((entry) => !normalized || `${entry.subject} ${entry.content}`.toLocaleLowerCase('zh-CN').includes(normalized))
       .sort((left, right) => sort === 'important' ? right.importance - left.importance
         : new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime());
@@ -197,7 +197,9 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
         <option value="all">全部类型</option><option value="semantic">事实</option><option value="preference">偏好</option>
         <option value="plan">计划</option><option value="episodic">经历</option><option value="relationship">关系</option>
       </select><select aria-label="记忆状态" value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}>
-        <option value="all">全部状态</option><option value="active">有效</option><option value="expired">已过期</option>
+        <option value="all">全部状态</option><option value="active">有效</option>
+        <option value="naturally-expired">自然过期</option><option value="user-deleted">用户删除</option>
+        <option value="superseded">已被替代</option>
       </select><select aria-label="记忆排序" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
         <option value="recent">最近更新</option><option value="important">重要性</option>
       </select></div>}
@@ -206,12 +208,19 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
         : entries.length === 0 ? <div className="relationship-empty"><p>目前还没有形成长期记忆。</p></div>
           : visibleEntries.length === 0 ? <div className="relationship-empty"><p>没有符合条件的记忆。</p></div>
           : <div className="memory-list">{visibleEntries.map((entry) => <article className="memory-entry" key={entry.id}>
-            <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)} · {entry.state === 'active' ? '有效' : '已过期'}</span></div>
-            <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
-            {entry.source && <button className="memory-source" type="button"
-              onClick={() => onOpenSource(entry.source!.messageId)} title={entry.source.excerpt}>
-              查看来源对话 · {new Date(entry.source.createdAt).toLocaleDateString('zh-CN')}
-            </button>}
+             <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)} · {memoryLifecycleLabel(entry.lifecycle)}</span></div>
+             <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · {entry.reinforcementCount > 1 ? `已由 ${entry.reinforcementCount} 次表达强化` : '来自 1 次表达'} · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
+             {(entry.sources.length > 0 || entry.relations.length > 0) && <details className="memory-evidence">
+               <summary>证据与演变</summary>
+               {entry.sources.map((source, index) => <button className="memory-source" type="button"
+                 key={`${source.messageId}-${index}`} onClick={() => onOpenSource(source.messageId)} title={source.excerpt}>
+                 证据 {index + 1} · {new Date(source.createdAt).toLocaleDateString('zh-CN')} · {source.evidence}
+               </button>)}
+               {entry.relations.map((relation) => <div className="memory-relation" key={`${relation.memoryId}-${relation.relation}-${relation.direction}`}>
+                 <span>{relation.relation === 'contradicts' ? '存在冲突' : '发生替代'}</span>
+                 <p>{relation.subject}：{relation.content}</p>
+               </div>)}
+             </details>}
             {entry.state === 'active' && <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>}
             {entry.canRestore && <div className="memory-entry-actions"><button type="button"
               onClick={() => void restore(entry)}><RotateCcw size={13} aria-hidden="true" />恢复记忆</button></div>}
@@ -220,6 +229,11 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
 
 function memoryTypeLabel(type: MemoryCenterEntry['type']): string {
   return ({ semantic: '事实', preference: '偏好', plan: '计划', episodic: '经历', relationship: '关系' })[type];
+}
+
+function memoryLifecycleLabel(lifecycle: MemoryCenterEntry['lifecycle']): string {
+  return ({ active: '有效', 'naturally-expired': '自然过期', 'user-deleted': '用户删除',
+    superseded: '已被替代' })[lifecycle];
 }
 
 function CharacterView({ character, visual, onVisualChange, onCreate }: {

@@ -321,11 +321,18 @@ export type PersonalityEvidenceSummary = z.infer<typeof PersonalityEvidenceSumma
 export const MemoryCenterEntrySchema = z.object({
   id: z.string().min(1), type: z.enum(['semantic', 'preference', 'plan', 'episodic', 'relationship']),
   subject: z.string(), content: z.string(), confidence: z.number().min(0).max(1),
-  importance: z.number().min(0).max(1), state: z.enum(['active', 'superseded', 'expired']),
+  importance: z.number().min(0).max(1), reinforcementCount: z.number().int().positive(),
+  state: z.enum(['active', 'superseded', 'expired']),
+  lifecycle: z.enum(['active', 'naturally-expired', 'user-deleted', 'superseded']),
   firstSeenAt: z.iso.datetime(), lastSeenAt: z.iso.datetime(),
   expiresAt: z.iso.datetime().nullable(), evidence: z.string(),
   source: z.object({ messageId: z.string().min(1), conversationId: z.string().min(1),
-    excerpt: z.string(), createdAt: z.iso.datetime() }).nullable(),
+    excerpt: z.string(), evidence: z.string(), createdAt: z.iso.datetime() }).nullable(),
+  sources: z.array(z.object({ messageId: z.string().min(1), conversationId: z.string().min(1),
+    excerpt: z.string(), evidence: z.string(), createdAt: z.iso.datetime() })).max(20),
+  relations: z.array(z.object({ memoryId: z.string().min(1), subject: z.string(), content: z.string(),
+    state: z.enum(['active', 'superseded', 'expired']), relation: z.enum(['contradicts', 'supersedes']),
+    direction: z.enum(['outgoing', 'incoming']) })).max(20),
   canRestore: z.boolean(),
 });
 export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);

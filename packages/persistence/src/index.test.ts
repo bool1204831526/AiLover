@@ -261,11 +261,16 @@ describe('SqliteMemoryRepository', () => {
     await conversations.saveMessage({ id: 'query-message', conversationId: 'conversation-memory',
       role: 'user', content: '手冲咖啡', status: 'completed', model: null,
       createdAt: new Date('2026-09-11T00:00:00Z') });
+    await conversations.saveMessage({ id: 'source-message-2', conversationId: 'conversation-memory',
+      role: 'user', content: '我喜欢手冲咖啡', status: 'completed', model: null,
+      createdAt: new Date('2026-09-02T00:00:00Z') });
     const memoryRepository = new SqliteMemoryRepository(database);
     const service = new MemoryService({ repository: memoryRepository,
       idGenerator: { next: () => 'memory-fts' } });
     await service.capture({ userId: 'local-user', characterId: character.id,
       messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
+    await service.capture({ userId: 'local-user', characterId: character.id,
+      messageId: 'source-message-2', text: '我喜欢手冲咖啡', now: new Date('2026-09-02T00:00:00Z') });
     await service.capture({ userId: 'local-user', characterId: character.id,
       messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
     const recalled = await service.recall({ characterId: character.id, queryMessageId: 'query-message',
@@ -274,13 +279,15 @@ describe('SqliteMemoryRepository', () => {
     expect(database.sqlite.prepare('SELECT evidence FROM memory_sources').get())
       .toEqual({ evidence: '我喜欢手冲咖啡' });
     expect(database.sqlite.prepare('SELECT reinforcement_count FROM memories').get())
-      .toEqual({ reinforcement_count: 1 });
+      .toEqual({ reinforcement_count: 2 });
     expect(database.sqlite.prepare('SELECT query_message_id FROM memory_recalls').get())
       .toEqual({ query_message_id: 'query-message' });
     expect(await memoryRepository.getPrimarySource(character.id, 'memory-fts')).toMatchObject({
       messageId: 'source-message', conversationId: 'conversation-memory', excerpt: '我喜欢手冲咖啡',
     });
     expect(await memoryRepository.getPrimarySource('another-character', 'memory-fts')).toBeNull();
+    expect(await memoryRepository.getSources(character.id, 'memory-fts')).toHaveLength(2);
+    expect(await memoryRepository.getSources('another-character', 'memory-fts')).toEqual([]);
     expect(await memoryRepository.correct('another-character', 'memory-fts', '错误修改', 1, new Date())).toBe(false);
     expect(await memoryRepository.correct(character.id, 'memory-fts', '我更喜欢拿铁', 0.7, new Date())).toBe(true);
     expect(database.sqlite.prepare('SELECT content FROM memories WHERE id = ?').get('memory-fts'))
@@ -294,6 +301,22 @@ describe('SqliteMemoryRepository', () => {
     expect(await memoryRepository.restore(character.id, 'memory-fts', new Date())).toBe(true);
     expect(await memoryRepository.wasSoftDeleted(character.id, 'memory-fts')).toBe(false);
     expect(await memoryRepository.listActive(character.id)).toHaveLength(1);
+    await conversations.saveMessage({ id: 'source-message-conflict', conversationId: 'conversation-memory',
+      role: 'user', content: '我不喜欢手冲咖啡', status: 'completed', model: null,
+      createdAt: new Date('2026-09-12T00:00:00Z') });
+    const conflictingService = new MemoryService({ repository: memoryRepository,
+      idGenerator: { next: () => 'memory-conflict' } });
+    await conflictingService.capture({ userId: 'local-user', characterId: character.id,
+      messageId: 'source-message-conflict', text: '我不喜欢手冲咖啡', now: new Date('2026-09-12T00:00:00Z') });
+    expect((await memoryRepository.listForCenter(character.id)).map(({ state }) => state).sort())
+      .toEqual(['active', 'superseded']);
+    expect(await memoryRepository.getRelations(character.id, 'memory-conflict')).toMatchObject([
+      { memoryId: 'memory-fts', relation: 'contradicts', direction: 'outgoing', state: 'superseded' },
+    ]);
+    expect(await memoryRepository.getRelations(character.id, 'memory-fts')).toMatchObject([
+      { memoryId: 'memory-conflict', relation: 'contradicts', direction: 'incoming', state: 'active' },
+    ]);
+    expect(await memoryRepository.getRelations('another-character', 'memory-fts')).toEqual([]);
     database.close();
   });
 });

@@ -28,17 +28,16 @@ export type StoredMemory = MemoryCandidate & {
 };
 
 export type MemoryCenterEntry = Pick<StoredMemory, 'id' | 'type' | 'subject' | 'content' |
-  'confidence' | 'importance' | 'state' | 'firstSeenAt' | 'lastSeenAt' | 'expiresAt' | 'evidence'> & {
+  'confidence' | 'importance' | 'reinforcementCount' | 'state' | 'firstSeenAt' | 'lastSeenAt' | 'expiresAt' | 'evidence'> & {
     source?: { messageId: string; conversationId: string; excerpt: string; createdAt: Date } | null;
   };
 
 export function buildMemoryCenterEntries(memories: StoredMemory[], limit = 100): MemoryCenterEntry[] {
-  return memories.filter((memory) => memory.state !== 'superseded')
-    .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
+  return memories.sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
     .slice(0, Math.max(0, limit))
     .map(({ id, type, subject, content, confidence, importance, state, firstSeenAt,
-      lastSeenAt, expiresAt, evidence }) => ({ id, type, subject, content, confidence,
-      importance, state, firstSeenAt, lastSeenAt, expiresAt, evidence }));
+      lastSeenAt, expiresAt, evidence, reinforcementCount }) => ({ id, type, subject, content,
+      confidence, importance, reinforcementCount, state, firstSeenAt, lastSeenAt, expiresAt, evidence }));
 }
 
 export function correctMemory(
