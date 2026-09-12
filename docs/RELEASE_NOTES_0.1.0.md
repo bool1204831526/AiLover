@@ -13,6 +13,7 @@
 - Local consolidation of repeated compatible experiences into source-traceable long-term insights.
 - Bounded self-model projections for the companion's current facts, beliefs and values.
 - Expiry-aware future-intention candidates derived from active user plans.
+- Chronological relationship milestone projection from important shared experiences.
 - Bounded emotion, relationship and personality evolution with traceable source messages.
 - Scenario-aware personality projection that turns current traits into private, natural-language behavior guidance.
 - Natural-language relationship summary without exposing internal scores.

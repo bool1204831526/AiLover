@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -227,5 +227,20 @@ describe('EpisodicMemoryService', () => {
     expect(intentions[0]?.triggerType).toBe('return');
     expect(intentions[0]?.sourceMemoryIds).toEqual(['memory-plan']);
     expect(intentions[0]?.expiresAt?.toISOString()).toBe('2026-09-25T00:00:00.000Z');
+  });
+
+  it('builds a chronological relationship timeline from important episodes', () => {
+    const make = (id: string, text: string, at: string) => {
+      const candidate = extractEpisodeCandidate({ ...base, userText: text });
+      return { ...candidate!, id, characterId: base.characterId, conversationId: base.conversationId,
+        eventTime: new Date(at), createdAt: new Date(at), reinforcementCount: 1, status: 'active' as const,
+        sourceMessageIds: [`source-${id}`], relatedMemoryIds: [], lastRecalledAt: null };
+    };
+    const timeline = buildRelationshipTimeline([
+      make('repair', '对不起，我们和好吧', '2026-09-13T00:00:00Z'),
+      make('first', '这是我们第一次见面', '2026-09-01T00:00:00Z'),
+      make('conflict', '你骗我了，我很生气', '2026-09-12T00:00:00Z'),
+    ]);
+    expect(timeline.map(({ kind }) => kind)).toEqual(['first', 'conflict', 'repair']);
   });
 });

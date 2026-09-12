@@ -445,6 +445,28 @@ export function intentionsFromMemories(
     }));
 }
 
+export type RelationshipMilestone = {
+  episodeId: string;
+  occurredAt: Date;
+  title: string;
+  kind: EpisodeKind;
+  importance: number;
+};
+
+export function buildRelationshipTimeline(
+  episodes: StoredEpisode[],
+  limit = 12,
+): RelationshipMilestone[] {
+  return episodes.filter((episode) => episode.status === 'active' && episode.relationshipRelevance >= 0.7)
+    .sort((left, right) => right.eventTime.getTime() - left.eventTime.getTime())
+    .filter((episode, index, all) => all.findIndex((item) => item.kind === episode.kind &&
+      item.title === episode.title) === index)
+    .slice(0, limit)
+    .map((episode) => ({ episodeId: episode.id, occurredAt: episode.eventTime,
+      title: episode.title, kind: episode.kind, importance: episode.importance }))
+    .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
+}
+
 export function consolidateEpisodes(
   episodes: StoredEpisode[],
   idGenerator: { next(): string },
