@@ -277,6 +277,10 @@ describe('SqliteMemoryRepository', () => {
       .toEqual({ reinforcement_count: 1 });
     expect(database.sqlite.prepare('SELECT query_message_id FROM memory_recalls').get())
       .toEqual({ query_message_id: 'query-message' });
+    expect(await memoryRepository.getPrimarySource(character.id, 'memory-fts')).toMatchObject({
+      messageId: 'source-message', conversationId: 'conversation-memory', excerpt: '我喜欢手冲咖啡',
+    });
+    expect(await memoryRepository.getPrimarySource('another-character', 'memory-fts')).toBeNull();
     expect(await memoryRepository.correct('another-character', 'memory-fts', '错误修改', 1, new Date())).toBe(false);
     expect(await memoryRepository.correct(character.id, 'memory-fts', '我更喜欢拿铁', 0.7, new Date())).toBe(true);
     expect(database.sqlite.prepare('SELECT content FROM memories WHERE id = ?').get('memory-fts'))

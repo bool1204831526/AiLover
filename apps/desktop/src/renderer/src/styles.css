@@ -1112,6 +1112,7 @@ button:disabled {
 .memory-entry-head span { color: #777a7e; font-size: 12px; }
 .memory-entry p { margin: 9px 0; line-height: 1.6; }
 .memory-entry small { color: #777a7e; }
+.memory-source { display: block; max-width: 100%; margin-top: 9px; padding: 0; overflow: hidden; border: 0; background: transparent; color: #6d5b5e; cursor: pointer; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .memory-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
 .memory-entry-actions button { border: 0; background: transparent; color: #a94756; cursor: pointer; padding: 3px 0; }
 @media (max-width: 980px) { .memory-toolbar { grid-template-columns: 1fr 1fr; } .memory-search { grid-column: 1 / -1; } }

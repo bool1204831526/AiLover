@@ -324,6 +324,8 @@ export const MemoryCenterEntrySchema = z.object({
   importance: z.number().min(0).max(1), state: z.enum(['active', 'superseded', 'expired']),
   firstSeenAt: z.iso.datetime(), lastSeenAt: z.iso.datetime(),
   expiresAt: z.iso.datetime().nullable(), evidence: z.string(),
+  source: z.object({ messageId: z.string().min(1), conversationId: z.string().min(1),
+    excerpt: z.string(), createdAt: z.iso.datetime() }).nullable(),
 });
 export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);
 export type MemoryCenterEntry = z.infer<typeof MemoryCenterEntrySchema>;

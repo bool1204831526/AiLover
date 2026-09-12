@@ -484,6 +484,20 @@ export class SqliteMemoryRepository implements MemoryRepository {
       .all(characterId) as MemoryRow[]).map(toStoredMemory);
   }
 
+  public async getPrimarySource(characterId: string, memoryId: string): Promise<{
+    messageId: string; conversationId: string; excerpt: string; createdAt: Date;
+  } | null> {
+    const row = this.database.sqlite.prepare(`SELECT messages.id AS message_id,
+      messages.conversation_id, messages.content, messages.created_at
+      FROM memories JOIN memory_sources ON memory_sources.memory_id = memories.id
+      JOIN messages ON messages.id = memory_sources.message_id
+      WHERE memories.id = ? AND memories.character_id = ?
+      ORDER BY memory_sources.created_at ASC LIMIT 1`).get(memoryId, characterId) as
+      { message_id: string; conversation_id: string; content: string; created_at: string } | undefined;
+    return row ? { messageId: row.message_id, conversationId: row.conversation_id,
+      excerpt: row.content.slice(0, 180), createdAt: new Date(row.created_at) } : null;
+  }
+
   public async updateStrength(id: string, strength: number, state: StoredMemory['state']): Promise<void> {
     this.database.sqlite.prepare('UPDATE memories SET recall_strength = ?, state = ? WHERE id = ?')
       .run(strength, state, id);

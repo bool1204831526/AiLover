@@ -479,9 +479,12 @@ function registerIpcHandlers(): void {
     const current = await characterService.findCurrent();
     if (!current) return [];
     const memories = await memoryRepository.listForCenter(current.id);
-    return buildMemoryCenterEntries(memories).map((memory) => ({ ...memory,
-      firstSeenAt: memory.firstSeenAt.toISOString(), lastSeenAt: memory.lastSeenAt.toISOString(),
-      expiresAt: memory.expiresAt?.toISOString() ?? null }));
+    return Promise.all(buildMemoryCenterEntries(memories).map(async (memory) => {
+      const source = await memoryRepository.getPrimarySource(current.id, memory.id);
+      return { ...memory, firstSeenAt: memory.firstSeenAt.toISOString(),
+        lastSeenAt: memory.lastSeenAt.toISOString(), expiresAt: memory.expiresAt?.toISOString() ?? null,
+        source: source ? { ...source, createdAt: source.createdAt.toISOString() } : null };
+    }));
   });
   ipcMain.handle(IPC_CHANNELS.memoryCorrect, async (_event, input: unknown) => {
     const value = MemoryCorrectionSchema.parse(input);

@@ -71,6 +71,7 @@
 - Added traceable local correction and soft-delete operations for memory records.
 - Scoped every memory correction and deletion to the current character and preserved immutable source evidence.
 - Added keyword search, type/state filters, sorting and visibility for soft-deleted memories.
+- Added character-scoped source excerpts and direct navigation to the source conversation context.
 
 # Consolidated memory persistence
 

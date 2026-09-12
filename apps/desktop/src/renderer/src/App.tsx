@@ -61,6 +61,7 @@ export function App(): React.JSX.Element {
   const [activeSection, setActiveSection] = useState('chat');
   const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [chatSourceMessageId, setChatSourceMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     const api = window.ailover;
@@ -125,13 +126,16 @@ export function App(): React.JSX.Element {
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
             onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
-              ? <MemoryView character={character} /> : <>
+              ? <MemoryView character={character} onOpenSource={(messageId) => {
+                setChatSourceMessageId(messageId); setActiveSection('chat');
+              }} /> : <>
         <header className="conversation-header"><div><span className="eyebrow">当前对话</span>
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
             <SlidersHorizontal aria-hidden="true" size={19} /></button></header>
         <ChatView character={character} bootstrapError={error}
           modelConfigured={bootstrap?.setup.modelConfigured ?? false}
+          sourceMessageId={chatSourceMessageId} onClearSource={() => setChatSourceMessageId(null)}
           onOpenSettings={() => setActiveSection('settings')} />
       </>}
     </section>
@@ -148,7 +152,8 @@ export function App(): React.JSX.Element {
   </main>;
 }
 
-function MemoryView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
+function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot | null;
+  onOpenSource(messageId: string): void }): React.JSX.Element {
   const [entries, setEntries] = useState<MemoryCenterEntry[]>([]);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
@@ -199,6 +204,10 @@ function MemoryView({ character }: { character: CharacterSnapshot | null }): Rea
           : <div className="memory-list">{visibleEntries.map((entry) => <article className="memory-entry" key={entry.id}>
             <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)} · {entry.state === 'active' ? '有效' : '已过期'}</span></div>
             <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
+            {entry.source && <button className="memory-source" type="button"
+              onClick={() => onOpenSource(entry.source!.messageId)} title={entry.source.excerpt}>
+              查看来源对话 · {new Date(entry.source.createdAt).toLocaleDateString('zh-CN')}
+            </button>}
             {entry.state === 'active' && <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>}
           </article>)}</div>}</div></>;
 }
@@ -370,9 +379,9 @@ function milestoneLabel(kind: RelationshipMilestone['kind']): string {
     conflict: '关系波动', repair: '修复与和好', disclosure: '真心倾诉', relationship: '关系表达' })[kind];
 }
 
-function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }: {
+function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId, onClearSource, onOpenSettings }: {
   character: CharacterSnapshot | null; bootstrapError: string | null;
-  modelConfigured: boolean; onOpenSettings(): void;
+  modelConfigured: boolean; sourceMessageId: string | null; onClearSource(): void; onOpenSettings(): void;
 }): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -386,11 +395,15 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
   useEffect(() => {
     setMessages([]);
     setChatError(null);
-    setHistoryTargetId(null);
     if (!character || !window.ailover) return;
-    void window.ailover.conversation.load().then(({ messages: restored }) => setMessages(restored))
+    const request = sourceMessageId
+      ? window.ailover.conversation.loadContext({ messageId: sourceMessageId })
+      : window.ailover.conversation.load();
+    void request.then(({ messages: restored }) => {
+      setHistoryTargetId(sourceMessageId); setMessages(restored);
+    })
       .catch(() => setChatError('无法读取聊天记录。'));
-  }, [character?.id]);
+  }, [character?.id, sourceMessageId]);
 
   async function searchMessages(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -414,6 +427,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
 
   async function returnToLatest(): Promise<void> {
     if (!window.ailover) return;
+    if (sourceMessageId) { onClearSource(); return; }
     setChatError(null);
     try {
       const history = await window.ailover.conversation.load();

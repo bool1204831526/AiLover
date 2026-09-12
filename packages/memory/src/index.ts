@@ -26,7 +26,9 @@ export type StoredMemory = MemoryCandidate & {
 };
 
 export type MemoryCenterEntry = Pick<StoredMemory, 'id' | 'type' | 'subject' | 'content' |
-  'confidence' | 'importance' | 'state' | 'firstSeenAt' | 'lastSeenAt' | 'expiresAt' | 'evidence'>;
+  'confidence' | 'importance' | 'state' | 'firstSeenAt' | 'lastSeenAt' | 'expiresAt' | 'evidence'> & {
+    source?: { messageId: string; conversationId: string; excerpt: string; createdAt: Date } | null;
+  };
 
 export function buildMemoryCenterEntries(memories: StoredMemory[], limit = 100): MemoryCenterEntry[] {
   return memories.filter((memory) => memory.state !== 'superseded')
