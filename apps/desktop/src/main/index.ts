@@ -27,10 +27,11 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
 import { createCharacter, type Character } from '@ailover/domain';
 import { advanceFutureIntentions, buildMemoryCenterEntries, EpisodicMemoryService,
   buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService,
+  shouldAttemptStructuredMemoryExtraction, validateStructuredMemoryProposals,
   type ConsolidatedMemory, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
-  streamModelChat } from '@ailover/model-gateway';
+  requestStructuredMemoryProposals, streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
 import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
@@ -1024,6 +1025,28 @@ async function completeChat(
       }
     }
     activeChats.delete(requestId);
+    if (completedSuccessfully) {
+      setImmediate(() => void captureStructuredMemory(character.id, userMessage));
+    }
+  }
+}
+
+async function captureStructuredMemory(characterId: string, userMessage: StoredChatMessage): Promise<void> {
+  try {
+    if (!shouldAttemptStructuredMemoryExtraction(userMessage.content)) return;
+    const profile = await modelProfileRepository.get();
+    if (!profile) return;
+    const apiKey = decryptApiKey(profile.encryptedApiKey);
+    const sourceText = userMessage.content.slice(0, 4_000);
+    const proposals = await requestStructuredMemoryProposals({ provider: profile.provider,
+      endpoint: profile.endpoint, model: profile.model, messages: [], sourceText,
+      timeoutMs: 8_000, ...(apiKey ? { apiKey } : {}) });
+    const candidates = validateStructuredMemoryProposals(proposals, sourceText, userMessage.createdAt);
+    if (!candidates.length) return;
+    await memoryService.captureCandidates({ userId: 'local-user', characterId,
+      messageId: userMessage.id, now: userMessage.createdAt }, candidates);
+  } catch (error) {
+    logger.warn({ error }, 'Structured memory extraction failed; local capture remains available');
   }
 }
 

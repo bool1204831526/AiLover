@@ -87,6 +87,13 @@ export class MemoryService {
     userId: string; characterId: string; messageId: string; text: string; now: Date;
   }): Promise<MemoryCandidate[]> {
     const candidates = extractMemoryCandidates(input.text, input.now);
+    await this.captureCandidates(input, candidates);
+    return candidates;
+  }
+
+  public async captureCandidates(input: {
+    userId: string; characterId: string; messageId: string; now: Date;
+  }, candidates: MemoryCandidate[]): Promise<void> {
     for (const candidate of candidates) {
       const related = await this.options.repository.findByKey(input.characterId, candidate.normalizedKey);
       const duplicate = related.find((memory) => memory.polarity === candidate.polarity);
@@ -104,7 +111,6 @@ export class MemoryService {
         await this.options.repository.updateStrength(previous.id, previous.recallStrength, 'superseded');
       }
     }
-    return candidates;
   }
 
   public async recall(input: {
@@ -205,6 +211,12 @@ export function validateStructuredMemoryProposals(
       emotionalWeight: proposal.emotionalWeight, polarity: proposal.polarity,
       expiresAt, evidence: `结构化提取：${evidence}` }];
   }));
+}
+
+export function shouldAttemptStructuredMemoryExtraction(sourceText: string): boolean {
+  const text = sourceText.trim();
+  if (text.length < 4 || /[吗？?]$/.test(text) || /(如果|假如|也许|可能|大概|或许|说不定)/.test(text)) return false;
+  return /(我(?:是|叫|住|在|有|没有|喜欢|爱|讨厌|希望|想要|打算|计划|准备)|我的|我们|记住|以后|明天|后天|下周|生日|工作|职业|家人|朋友)/.test(text);
 }
 
 export function inferMemoryTypes(query: string): MemoryType[] {

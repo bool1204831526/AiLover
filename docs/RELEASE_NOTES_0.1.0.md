@@ -97,3 +97,5 @@
 - Rejected fabricated, hypothetical, question-shaped and low-confidence evidence before persistence.
 - Kept normalized keys, stored content and plan expiry policy under deterministic local control.
 - Added failure-isolated non-streaming JSON requests for OpenAI-compatible and Ollama providers; chat streaming remains independent.
+- Connected validated proposals to successful-chat memory capture as a background task, while preserving deterministic local extraction as the fallback.
+- Skipped secondary model calls for ordinary short chat, questions and uncertain claims, and bounded extraction input to control cost.

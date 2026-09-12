@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, correctMemory, intentionsFromMemories, markMemoryDeleted, MemoryService, validateStructuredMemoryProposals, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, correctMemory, intentionsFromMemories, markMemoryDeleted, MemoryService, shouldAttemptStructuredMemoryExtraction, validateStructuredMemoryProposals, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -107,6 +107,12 @@ describe('memory candidate extraction', () => {
       { ...common, confidence: 0.5, evidenceQuote: '我可能喜欢拿铁。' },
     ], source, now)).toEqual([]);
   });
+
+  it('only schedules structured extraction for likely durable user information', () => {
+    expect(shouldAttemptStructuredMemoryExtraction('你好')).toBe(false);
+    expect(shouldAttemptStructuredMemoryExtraction('我是一名建筑师')).toBe(true);
+    expect(shouldAttemptStructuredMemoryExtraction('如果我以后搬家会怎样？')).toBe(false);
+  });
 });
 
 it('builds a bounded memory center view without superseded entries', () => {
@@ -143,6 +149,20 @@ describe('MemoryService', () => {
     const recalled = await service.recall({ characterId: 'character-1', queryMessageId: 'message-4',
       query: '我喜欢咖啡吗', now: new Date('2026-09-12T00:00:00Z') });
     expect(recalled.map(({ polarity }) => polarity)).toEqual(['negative']);
+  });
+
+  it('persists prevalidated structured candidates through the controlled entry point', async () => {
+    const repository = new InMemoryRepository();
+    const service = new MemoryService({ repository, idGenerator: { next: () => 'structured-memory' } });
+    const capturedAt = new Date('2026-09-12T00:00:00Z');
+    const candidates = validateStructuredMemoryProposals([{ type: 'semantic', subject: '用户职业',
+      polarity: 'neutral', confidence: 0.84, importance: 0.7, emotionalWeight: 0.2,
+      evidenceQuote: '我是一名建筑师' }], '我是一名建筑师', capturedAt);
+    await service.captureCandidates({ userId: 'local-user', characterId: 'character-1',
+      messageId: 'message-structured', now: capturedAt }, candidates);
+    expect(await repository.listActive('character-1')).toMatchObject([
+      { id: 'structured-memory', content: '我是一名建筑师' },
+    ]);
   });
 
   it('recalls a preference across days and audits the evidence use', async () => {

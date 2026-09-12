@@ -85,11 +85,12 @@ describe('requestStructuredMemoryProposals', () => {
     let body = '';
     const result = await requestStructuredMemoryProposals({ provider: 'openai-compatible', endpoint: 'https://example.test/v1', model: 'model-a', messages: [], sourceText: '我喜欢咖啡' }, async (_url, options) => {
       body = String(options?.body);
-      return new Response(JSON.stringify({ choices: [{ message: { content: '[{"type":"preference"}]' } }] }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"proposals":[{"type":"preference"}]}' } }] }), { status: 200 });
     });
     expect(result).toEqual([{ type: 'preference' }]);
     expect(body).toContain('"stream":false');
     expect(body).toContain('response_format');
+    expect(body).toContain('最多 6 项');
   });
 
   it('parses Ollama JSON and classifies server errors as retryable', async () => {

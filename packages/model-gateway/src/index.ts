@@ -60,7 +60,7 @@ export async function requestStructuredMemoryProposals(
   const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' });
   if (request.provider === 'openai-compatible' && request.apiKey) headers.set('Authorization', `Bearer ${request.apiKey}`);
   const messages: ModelChatMessage[] = [
-    { role: 'system', content: '从用户原文提取记忆候选。只输出 JSON 数组，每项包含 type, subject, polarity, confidence, importance, emotionalWeight, evidenceQuote, expiresAt。不要补充原文没有的事实。' },
+    { role: 'system', content: '从用户原文提取记忆候选。只输出 {"proposals":[]} JSON 对象，数组每项包含 type, subject, polarity, confidence, importance, emotionalWeight, evidenceQuote, expiresAt。最多 6 项，不要补充原文没有的事实。' },
     { role: 'user', content: request.sourceText },
   ];
   const body = request.provider === 'ollama'
@@ -83,7 +83,17 @@ export async function requestStructuredMemoryProposals(
   const payload = await response.json() as { choices?: { message?: { content?: unknown } }[]; message?: { content?: unknown } };
   const content = request.provider === 'ollama' ? payload.message?.content : payload.choices?.[0]?.message?.content;
   if (typeof content !== 'string') throw new ModelGatewayError('结构化记忆服务返回格式无效。', false);
-  try { return JSON.parse(content); } catch { throw new ModelGatewayError('结构化记忆服务返回的 JSON 无效。', false); }
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { proposals?: unknown }).proposals)) {
+      return (parsed as { proposals: unknown[] }).proposals;
+    }
+    throw new ModelGatewayError('结构化记忆服务没有返回候选数组。', false);
+  } catch (error) {
+    if (error instanceof ModelGatewayError) throw error;
+    throw new ModelGatewayError('结构化记忆服务返回的 JSON 无效。', false);
+  }
 }
 
 export class ModelGatewayError extends Error {
