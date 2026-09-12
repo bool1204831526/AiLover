@@ -478,6 +478,12 @@ export class SqliteMemoryRepository implements MemoryRepository {
     ).all(characterId) as MemoryRow[]).map(toStoredMemory);
   }
 
+  public async listForCenter(characterId: string): Promise<StoredMemory[]> {
+    return (this.database.sqlite.prepare(`SELECT * FROM memories
+      WHERE character_id = ? AND state IN ('active', 'expired') ORDER BY last_seen_at DESC`)
+      .all(characterId) as MemoryRow[]).map(toStoredMemory);
+  }
+
   public async updateStrength(id: string, strength: number, state: StoredMemory['state']): Promise<void> {
     this.database.sqlite.prepare('UPDATE memories SET recall_strength = ?, state = ? WHERE id = ?')
       .run(strength, state, id);

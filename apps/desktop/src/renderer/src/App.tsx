@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   ArrowDown, Brain, Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
   RotateCcw, Search, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
@@ -151,11 +151,23 @@ export function App(): React.JSX.Element {
 function MemoryView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
   const [entries, setEntries] = useState<MemoryCenterEntry[]>([]);
   const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | MemoryCenterEntry['type']>('all');
+  const [stateFilter, setStateFilter] = useState<'all' | MemoryCenterEntry['state']>('all');
+  const [sort, setSort] = useState<'recent' | 'important'>('recent');
   useEffect(() => {
     setEntries([]); setFailed(false);
     if (!character || !window.ailover) return;
     void window.ailover.memory.list().then(setEntries).catch(() => setFailed(true));
   }, [character?.id]);
+  const visibleEntries = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('zh-CN');
+    return entries.filter((entry) => typeFilter === 'all' || entry.type === typeFilter)
+      .filter((entry) => stateFilter === 'all' || entry.state === stateFilter)
+      .filter((entry) => !normalized || `${entry.subject} ${entry.content}`.toLocaleLowerCase('zh-CN').includes(normalized))
+      .sort((left, right) => sort === 'important' ? right.importance - left.importance
+        : new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime());
+  }, [entries, query, sort, stateFilter, typeFilter]);
   async function edit(entry: MemoryCenterEntry): Promise<void> {
     if (!window.ailover) return;
     const content = window.prompt('修改这条记忆', entry.content);
@@ -169,13 +181,25 @@ function MemoryView({ character }: { character: CharacterSnapshot | null }): Rea
   }
   return <><header className="conversation-header"><div><span className="eyebrow">长期记忆</span>
     <h2>{character ? `${character.name}记住的事` : '尚未相遇'}</h2></div></header>
-    <div className="memory-page">{!character ? <div className="relationship-empty"><Brain size={28} /><p>创建角色后，这里会整理重要记忆。</p></div>
+    <div className="memory-page">{character && entries.length > 0 && <div className="memory-toolbar">
+      <label className="memory-search"><Search size={16} aria-hidden="true" /><input value={query}
+        onChange={(event) => setQuery(event.target.value)} placeholder="搜索记忆" /></label>
+      <select aria-label="记忆类型" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
+        <option value="all">全部类型</option><option value="semantic">事实</option><option value="preference">偏好</option>
+        <option value="plan">计划</option><option value="episodic">经历</option><option value="relationship">关系</option>
+      </select><select aria-label="记忆状态" value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}>
+        <option value="all">全部状态</option><option value="active">有效</option><option value="expired">已过期</option>
+      </select><select aria-label="记忆排序" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+        <option value="recent">最近更新</option><option value="important">重要性</option>
+      </select></div>}
+      {!character ? <div className="relationship-empty"><Brain size={28} /><p>创建角色后，这里会整理重要记忆。</p></div>
       : failed ? <div className="relationship-empty"><p>暂时无法读取记忆。</p></div>
         : entries.length === 0 ? <div className="relationship-empty"><p>目前还没有形成长期记忆。</p></div>
-          : <div className="memory-list">{entries.map((entry) => <article className="memory-entry" key={entry.id}>
-            <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)}</span></div>
+          : visibleEntries.length === 0 ? <div className="relationship-empty"><p>没有符合条件的记忆。</p></div>
+          : <div className="memory-list">{visibleEntries.map((entry) => <article className="memory-entry" key={entry.id}>
+            <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)} · {entry.state === 'active' ? '有效' : '已过期'}</span></div>
             <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
-            <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>
+            {entry.state === 'active' && <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>}
           </article>)}</div>}</div></>;
 }
 

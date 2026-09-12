@@ -478,7 +478,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.memoryList, async () => {
     const current = await characterService.findCurrent();
     if (!current) return [];
-    const memories = await memoryRepository.listActive(current.id);
+    const memories = await memoryRepository.listForCenter(current.id);
     return buildMemoryCenterEntries(memories).map((memory) => ({ ...memory,
       firstSeenAt: memory.firstSeenAt.toISOString(), lastSeenAt: memory.lastSeenAt.toISOString(),
       expiresAt: memory.expiresAt?.toISOString() ?? null }));

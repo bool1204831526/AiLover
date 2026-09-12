@@ -283,6 +283,8 @@ describe('SqliteMemoryRepository', () => {
       .toEqual({ content: '我更喜欢拿铁' });
     expect(await memoryRepository.softDelete('another-character', 'memory-fts')).toBe(false);
     expect(await memoryRepository.softDelete(character.id, 'memory-fts')).toBe(true);
+    expect((await memoryRepository.listForCenter(character.id))[0]?.state).toBe('expired');
+    expect(await memoryRepository.listActive(character.id)).toHaveLength(0);
     database.close();
   });
 });
