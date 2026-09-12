@@ -21,7 +21,7 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 6. Personality Evidence: connect experiences and feedback to explainable long-term trait evolution.
 7. Relationship Timeline: surface durable relationship milestones from episodes.
 8. Emotional Association: let relevant past experiences influence current bounded emotion.
-9. Future Intention: create limited, contextual and expiry-aware follow-up intentions.
+9. Future Intention: in progress; active plans now produce limited, expiry-aware return intentions.
 10. Memory Center: let users inspect, correct and delete memories with dependency-safe handling.
 
 Each phase must pass type checking, unit and integration tests before the next dependent phase begins.

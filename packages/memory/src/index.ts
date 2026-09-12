@@ -416,6 +416,35 @@ export type ConsolidatedMemory = {
   status: 'active' | 'faded' | 'superseded';
 };
 
+export type FutureIntention = {
+  id: string;
+  description: string;
+  triggerType: 'time' | 'topic' | 'return' | 'event';
+  triggerData: { dueAt?: Date; keywords?: string[] };
+  priority: number;
+  sourceMemoryIds: string[];
+  status: 'pending' | 'triggered' | 'completed' | 'expired';
+  createdAt: Date;
+  expiresAt: Date | null;
+};
+
+export function intentionsFromMemories(
+  memories: StoredMemory[],
+  idGenerator: { next(): string },
+  now: Date,
+): FutureIntention[] {
+  return memories.filter((memory) => memory.type === 'plan' && memory.state === 'active' &&
+    (!memory.expiresAt || memory.expiresAt > now)).slice(0, 3).map((memory) => ({
+      id: idGenerator.next(), description: `下次合适时可以关心：${memory.content}`,
+      triggerType: 'return' as const,
+      triggerData: { ...(memory.expiresAt ? { dueAt: memory.expiresAt } : {}),
+        keywords: terms(normalize(memory.content)).slice(0, 8) },
+      priority: Math.min(0.9, 0.55 + memory.importance * 0.35 + memory.emotionalWeight * 0.1),
+      sourceMemoryIds: [memory.id], status: 'pending' as const,
+      createdAt: now, expiresAt: memory.expiresAt,
+    }));
+}
+
 export function consolidateEpisodes(
   episodes: StoredEpisode[],
   idGenerator: { next(): string },

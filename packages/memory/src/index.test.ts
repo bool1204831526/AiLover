@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  consolidateEpisodes, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -214,5 +214,18 @@ describe('EpisodicMemoryService', () => {
       eventTime: base.now, createdAt: base.now, reinforcementCount: 1, status: 'active' as const,
       sourceMessageIds: [`message-${index}`], relatedMemoryIds: [], lastRecalledAt: null }));
     expect(consolidateEpisodes(stored, { next: () => 'insight' }, base.now)).toHaveLength(0);
+  });
+
+  it('derives bounded, expiring future intentions from active plans', () => {
+    const plan: StoredMemory = { id: 'memory-plan', userId: 'local-user', characterId: 'character-1',
+      type: 'plan', subject: '用户近期计划', content: '我下周要去面试', normalizedKey: 'plan:用户近期计划',
+      confidence: 0.92, importance: 0.65, emotionalWeight: 0.3, polarity: 'neutral',
+      recallStrength: 1, reinforcementCount: 1, state: 'active',
+      firstSeenAt: new Date('2026-09-11T00:00:00Z'), lastSeenAt: new Date('2026-09-11T00:00:00Z'),
+      lastRecalledAt: null, expiresAt: new Date('2026-09-25T00:00:00Z'), evidence: '我下周要去面试' };
+    const intentions = intentionsFromMemories([plan], { next: () => 'intention-1' }, new Date('2026-09-12T00:00:00Z'));
+    expect(intentions[0]?.triggerType).toBe('return');
+    expect(intentions[0]?.sourceMemoryIds).toEqual(['memory-plan']);
+    expect(intentions[0]?.expiresAt?.toISOString()).toBe('2026-09-25T00:00:00.000Z');
   });
 });
