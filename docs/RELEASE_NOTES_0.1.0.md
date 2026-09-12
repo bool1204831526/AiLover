@@ -9,6 +9,7 @@
 - Searchable long-term chat history with surrounding context and return-to-latest navigation.
 - Evidence-backed memory for preferences, plans and important interactions.
 - Bounded emotion, relationship and personality evolution with traceable source messages.
+- Scenario-aware personality projection that turns current traits into private, natural-language behavior guidance.
 - Natural-language relationship summary without exposing internal scores.
 - Versioned local portrait imports and independent image-capability detection.
 - Validated backup and restore with checksums, rollback and credential exclusion.

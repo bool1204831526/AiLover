@@ -53,6 +53,7 @@ export type ResponsePlan = {
   kind: 'respond' | 'ask_question' | 'decline' | 'do_nothing';
   tone: string[];
   guidance: string;
+  personalityProjection: string[];
   proposedEmotionEffects: Partial<EmotionState>;
   proposedRelationshipEffects: Partial<RelationshipState>;
 };
@@ -201,15 +202,81 @@ export function relationshipSummary(snapshot: CognitionSnapshot): {
 export function createResponsePlan(snapshot: CognitionSnapshot, signal: InteractionSignal): ResponsePlan {
   const conflict = Number(signal.relationshipDelta.conflict ?? 0) > 0;
   const disclosure = signal.reasons.includes('user shared personal feelings');
+  const personalityTone = personalityTones(snapshot.personality);
   const tone = conflict ? ['克制', '不升级冲突', '尊重边界']
     : disclosure ? ['温柔', '接纳', '认真倾听']
-      : snapshot.emotion.valence > 0.68 ? ['明朗', '亲近'] : ['自然', '真诚'];
+      : snapshot.emotion.valence > 0.68 ? ['明朗', '亲近', ...personalityTone].slice(0, 3)
+        : [...personalityTone, '自然', '真诚'].slice(0, 3);
   return { kind: disclosure ? 'ask_question' : 'respond', tone,
     guidance: conflict ? '先承认对方的情绪，避免反击或情感勒索，再简短询问发生了什么。'
       : disclosure ? '先回应对方的感受，再提出一个不过度追问的开放问题。'
         : '直接回应当前话题，保持角色一贯的表达方式。',
+    personalityProjection: projectPersonality(snapshot, signal),
     proposedEmotionEffects: signal.emotionDelta,
     proposedRelationshipEffects: signal.relationshipDelta };
+}
+
+export function projectPersonality(
+  snapshot: CognitionSnapshot,
+  signal: InteractionSignal,
+): string[] {
+  const personality = snapshot.personality;
+  const conflict = signal.reasons.includes('received conflict signal');
+  const disclosure = signal.reasons.includes('user shared personal feelings');
+
+  if (conflict) {
+    const projection = [
+      '当前是冲突场景，优先降低对抗强度、尊重边界，不用玩笑或高亢表达掩盖问题。',
+    ];
+    if (personality.warmth >= 0.7) projection.push('先表达在意并确认对方的感受，但不要情感勒索。');
+    if (personality.reserve >= 0.65 || personality.maturity >= 0.7) {
+      projection.push('保持沉稳和审慎，先澄清事实，再决定是否给出建议。');
+    }
+    if (personality.rationality >= 0.7) projection.push('可以帮助梳理原因，但不要把回应变成辩论。');
+    return projection;
+  }
+
+  if (disclosure) {
+    const projection = [
+      '当前是脆弱情绪场景，情绪安全优先；先接住感受，不使用调侃。',
+    ];
+    if (personality.warmth >= 0.65) projection.push('自然表达关心，让对方感到被认真听见。');
+    if (personality.rationality >= 0.7) projection.push('分析能力只用于理解处境，不要急于给方案。');
+    if (personality.initiative >= 0.65) projection.push('可以主动提出一个温和的开放问题，但不要连续追问。');
+    return projection;
+  }
+
+  const projection: string[] = [];
+  if (personality.warmth >= 0.7) projection.push('自然表达关心，并留意用户话语中的情绪。');
+  else if (personality.warmth <= 0.35) projection.push('保持友善但克制，减少过度情绪化的表达。');
+  if (personality.energy >= 0.7) projection.push('语气可以更有活力，并积极回应当前话题。');
+  else if (personality.energy <= 0.35) projection.push('保持平稳节奏，不主动制造过多话题。');
+  if (personality.reserve >= 0.7) projection.push('表达保持审慎，避免冲动承诺或越过关系边界。');
+  else if (personality.reserve <= 0.3) projection.push('可以更直接地表达真实感受，但仍尊重边界。');
+  if (personality.playfulness >= 0.7) projection.push('在场景合适时可以轻松表达或适度调侃。');
+  else if (personality.playfulness <= 0.35) projection.push('以认真表达为主，不必刻意加入玩笑。');
+  if (personality.maturity >= 0.7) projection.push('回应时兼顾长期影响，建议保持完整和稳定。');
+  if (personality.rationality >= 0.7) projection.push('分析类问题可结构化思考，同时保留情感回应。');
+  else if (personality.rationality <= 0.35) projection.push('更多从感受和关系角度回应，避免生硬分析。');
+  if (personality.initiative >= 0.7) {
+    projection.push(snapshot.relationship.familiarity >= 0.35
+      ? '可以主动延伸话题或适度提问，相关时自然联系共同经历。'
+      : '可以主动延伸话题，但关系仍在建立中，避免私人化追问。');
+  } else if (personality.initiative <= 0.35) {
+    projection.push('更多跟随用户引导，不强行延伸或连续提问。');
+  }
+  if (snapshot.emotion.valence < 0.4) projection.unshift('当前情绪偏低，表达应平稳，不放大消极感受。');
+  return projection.slice(0, 6);
+}
+
+function personalityTones(personality: PersonalityValues): string[] {
+  const tones: string[] = [];
+  if (personality.warmth >= 0.7) tones.push('温暖');
+  if (personality.energy >= 0.7) tones.push('有活力');
+  if (personality.reserve >= 0.7) tones.push('克制');
+  if (personality.maturity >= 0.75) tones.push('沉稳');
+  if (personality.playfulness >= 0.7) tones.push('轻松');
+  return tones.slice(0, 2);
 }
 
 function applyEmotion(state: EmotionState, delta: Partial<EmotionState>): EmotionState {

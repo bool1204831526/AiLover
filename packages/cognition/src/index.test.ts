@@ -4,12 +4,21 @@ import type { PersonalityValues } from '@ailover/domain';
 
 import {
   analyzeInteraction, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
-  createResponsePlan, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
+  createResponsePlan, projectPersonality, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
   type ReflectionRecord,
 } from './index';
 
 const baseline: PersonalityValues = { warmth: 0.7, energy: 0.5, reserve: 0.4,
   playfulness: 0.5, maturity: 0.6, rationality: 0.6, initiative: 0.5 };
+
+const currentSnapshot = (personality: PersonalityValues = baseline): CognitionSnapshot => ({
+  id: 'state-current', characterId: 'character-1',
+  emotion: { valence: 0.55, arousal: 0.35, security: 0.65, affection: 0.55 },
+  relationship: { trust: 0.5, intimacy: 0.4, affection: 0.5,
+    familiarity: 0.4, comfort: 0.5, conflict: 0.1 },
+  personality, reason: 'test', sourceMessageId: 'message-current',
+  ruleVersion: COGNITION_RULE_VERSION, recordedAt: new Date('2026-09-11T00:00:00Z'),
+});
 
 class MemoryCognitionRepository implements CognitionRepository {
   snapshot: CognitionSnapshot | null = null;
@@ -68,6 +77,40 @@ describe('cognition rules', () => {
       text: '请理性分析一下', now: new Date(),
     });
     expect(repository.snapshot?.personality.rationality).toBe(0.6);
+  });
+
+  it('projects traits without exposing internal values to the model', () => {
+    const personality = { ...baseline, warmth: 0.88, energy: 0.82,
+      rationality: 0.85, initiative: 0.8 };
+    const projection = projectPersonality(
+      currentSnapshot(personality), analyzeInteraction('今天聊聊项目'),
+    ).join(' ');
+    expect(projection).toContain('自然表达关心');
+    expect(projection).toContain('主动延伸话题');
+    expect(projection).not.toMatch(/warmth|initiative|0\.\d/);
+  });
+
+  it('lets emotional safety override playful and analytical traits', () => {
+    const personality = { ...baseline, warmth: 0.9, playfulness: 0.95,
+      rationality: 0.95, initiative: 0.9 };
+    const conflict = projectPersonality(
+      currentSnapshot(personality), analyzeInteraction('我很生气，你骗我了'),
+    );
+    expect(conflict[0]).toContain('不用玩笑');
+    expect(conflict.join(' ')).toContain('不要把回应变成辩论');
+    const disclosure = projectPersonality(
+      currentSnapshot(personality), analyzeInteraction('其实我很难过，只告诉你一个秘密'),
+    );
+    expect(disclosure[0]).toContain('情绪安全优先');
+    expect(disclosure.join(' ')).toContain('不要急于给方案');
+  });
+
+  it('includes a bounded personality projection in the response plan', () => {
+    const plan = createResponsePlan(
+      currentSnapshot({ ...baseline, initiative: 0.8 }), analyzeInteraction('我们接着聊吧'),
+    );
+    expect(plan.personalityProjection.join(' ')).toContain('主动延伸话题');
+    expect(plan.personalityProjection.length).toBeLessThanOrEqual(6);
   });
 
   it('creates a constrained response plan and reflection for meaningful disclosure', async () => {

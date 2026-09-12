@@ -824,7 +824,11 @@ async function completeChat(
     const interaction = analyzeInteraction(userMessage.content);
     const responsePlan = createResponsePlan(cognition, interaction);
     if (interaction.reasons.includes('received positive affection')) completionReaction = 'jumping';
-    const cognitionContext = `${projectCognition(cognition)}；回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`;
+    const personalityContext = responsePlan.personalityProjection.length
+      ? `当前人格表达倾向：\n- ${responsePlan.personalityProjection.join('\n- ')}` : '';
+    const cognitionContext = [projectCognition(cognition),
+      `回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`,
+      personalityContext].filter(Boolean).join('\n');
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
     const apiKey = decryptApiKey(profile.encryptedApiKey);
