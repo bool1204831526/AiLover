@@ -40,6 +40,13 @@ const emptyDraft: CharacterDraftInput = {
   appearance: '', speakingStyle: '', personalityTemplateId: 'gentle',
 };
 
+function mergeChatMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return retainRecentMessages([...byId.values()].sort((left, right) =>
+    new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()));
+}
+
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [character, setCharacter] = useState<CharacterSnapshot | null>(null);
@@ -303,6 +310,11 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
   }, [messages]);
 
   function handleStreamEvent(event: ChatStreamEvent): void {
+    if (event.type === 'started') {
+      setMessages((current) => mergeChatMessages(current, [event.userMessage, event.assistantMessage]));
+      setRequestId(event.requestId);
+      return;
+    }
     if (event.type === 'chunk') {
       setMessages((current) => current.map((message) => message.id === event.messageId
         ? { ...message, content: message.content + event.delta } : message));
@@ -324,9 +336,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     try {
       if (!window.ailover) throw new Error('聊天服务不可用');
       const receipt = await window.ailover.chat.send({ text: content, clientMessageId: crypto.randomUUID() });
-      setMessages((current) => retainRecentMessages(
-        [...current, receipt.userMessage, receipt.assistantMessage],
-      ));
+      setMessages((current) => mergeChatMessages(current, [receipt.userMessage, receipt.assistantMessage]));
       setRequestId(receipt.requestId);
     } catch {
       setDraft(content);

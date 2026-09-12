@@ -111,6 +111,8 @@ export const ChatSendReceiptSchema = z.object({
 export type ChatSendReceipt = z.infer<typeof ChatSendReceiptSchema>;
 
 export const ChatStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('started'), requestId: z.string(),
+    userMessage: ChatMessageSchema, assistantMessage: ChatMessageSchema }),
   z.object({ type: z.literal('chunk'), requestId: z.string(), messageId: z.string(), delta: z.string() }),
   z.object({ type: z.literal('completed'), requestId: z.string(), message: ChatMessageSchema }),
   z.object({ type: z.literal('cancelled'), requestId: z.string(), message: ChatMessageSchema }),

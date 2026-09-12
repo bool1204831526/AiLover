@@ -12,12 +12,56 @@
   display: grid;
   width: 100vw;
   height: 100vh;
-  padding: 18px;
+  grid-template-rows: 58px minmax(0, 1fr);
+  padding: 8px 18px 18px;
   place-items: center;
   overflow: hidden;
   background: transparent;
   -webkit-app-region: drag;
 }
+
+.pet-conversation-slot {
+  z-index: 3;
+  display: grid;
+  width: min(calc(100% - 34px), 196px);
+  height: 52px;
+  place-items: center;
+  justify-self: start;
+  -webkit-app-region: no-drag;
+}
+
+.pet-speech {
+  display: -webkit-box;
+  width: 100%;
+  max-height: 52px;
+  padding: 8px 10px;
+  overflow: hidden;
+  color: #37343a;
+  background: rgb(255 255 255 / 94%);
+  border: 1px solid rgb(70 60 74 / 10%);
+  border-radius: 6px;
+  box-shadow: 0 5px 16px rgb(35 28 40 / 14%);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pet-quick-chat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  width: 100%;
+  padding: 5px;
+  background: rgb(255 255 255 / 95%);
+  border: 1px solid rgb(70 60 74 / 12%);
+  border-radius: 6px;
+  box-shadow: 0 5px 16px rgb(35 28 40 / 14%);
+}
+.pet-quick-chat input { min-width: 0; padding: 5px 6px; border: 0; outline: 0; background: transparent; font-size: 11px; }
+.pet-quick-chat button { display: grid; width: 30px; height: 30px; padding: 0; place-items: center; color: #fff; background: #a94756; border: 0; border-radius: 5px; cursor: pointer; }
+.pet-quick-chat button:disabled { cursor: default; opacity: 0.45; }
 
 html:has(.desktop-pet-shell),
 body:has(.desktop-pet-shell),

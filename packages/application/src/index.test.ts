@@ -108,5 +108,6 @@ describe('desktop pet window placement', () => {
       .toEqual({ x: 100, y: 80, width: 240, height: 300 });
     expect(fitDesktopPetBounds({ x: 3000, y: -900, width: 240, height: 300 }, workArea))
       .toEqual({ x: 1680, y: 0, width: 240, height: 300 });
+    expect(fitDesktopPetBounds(null, workArea)).toEqual({ x: 1676, y: 696, width: 220, height: 320 });
   });
 });

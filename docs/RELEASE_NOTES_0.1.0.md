@@ -18,6 +18,7 @@
   proactive notifications and left/right window dragging.
 - Optional screen-bounded idle roaming, direct pet interaction, double-click opening and a pet context menu.
 - Persistent pet position and size, multi-display visibility recovery and an inactivity sleep state.
+- Synchronized compact desktop-pet chat with streamed reply bubbles and cross-window message updates.
 
 ## Privacy
 

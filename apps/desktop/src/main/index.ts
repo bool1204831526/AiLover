@@ -119,8 +119,12 @@ function toChatMessage(message: StoredChatMessage) {
 }
 
 function emitChatEvent(event: ChatStreamEvent): void {
+  const parsed = ChatStreamEventSchema.parse(event);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(IPC_CHANNELS.chatStream, ChatStreamEventSchema.parse(event));
+    mainWindow.webContents.send(IPC_CHANNELS.chatStream, parsed);
+  }
+  if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+    desktopPetWindow.webContents.send(IPC_CHANNELS.chatStream, parsed);
   }
 }
 
@@ -539,6 +543,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.chatSend, async (_event, input: unknown) => {
     const request = ChatSendInputSchema.parse(input);
+    if (activeChats.size > 0) throw new Error('当前回复尚未完成，请稍候。');
     const character = await characterService.findCurrent();
     if (!character) throw new Error('请先创建角色。');
     let conversation = await conversationRepository.findCurrent(character.id);
@@ -565,8 +570,10 @@ function registerIpcHandlers(): void {
     setImmediate(() => void completeChat(
       requestId, character, userMessage, assistantMessage, controller.signal,
     ));
-    return ChatSendReceiptSchema.parse({ requestId, userMessage: toChatMessage(userMessage),
+    const receipt = ChatSendReceiptSchema.parse({ requestId, userMessage: toChatMessage(userMessage),
       assistantMessage: toChatMessage(assistantMessage) });
+    emitChatEvent({ type: 'started', ...receipt });
+    return receipt;
   });
 
   ipcMain.handle(IPC_CHANNELS.chatCancel, async (_event, requestId: unknown) => {
@@ -910,7 +917,7 @@ function createDesktopPetWindow(): BrowserWindow {
   const display = savedBounds ? screen.getDisplayMatching(savedBounds) : screen.getPrimaryDisplay();
   const bounds = fitDesktopPetBounds(savedBounds, display.workArea);
   const window = new BrowserWindow({
-    ...bounds, minWidth: 180, minHeight: 220,
+    ...bounds, minWidth: 180, minHeight: 300,
     frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
     resizable: true, show: false, hasShadow: false,
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true,

@@ -47,6 +47,11 @@ describe('shared contracts', () => {
       messageId: 'message-1', delta: '你好' });
     expect(event.type === 'chunk' ? event.delta : '').toBe('你好');
     expect(() => ChatStreamEventSchema.parse({ type: 'failed', requestId: 'request-1' })).toThrow();
+    const message = { id: 'message-1', conversationId: 'conversation-1', role: 'user', content: '你好',
+      status: 'completed', model: null, createdAt: new Date().toISOString() };
+    expect(ChatStreamEventSchema.parse({ type: 'started', requestId: 'request-1', userMessage: message,
+      assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '', status: 'streaming' } }).type)
+      .toBe('started');
   });
 
   it('requires an idle action in desktop pet animation packs', () => {

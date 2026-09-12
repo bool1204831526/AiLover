@@ -167,7 +167,7 @@ export type Rectangle = { x: number; y: number; width: number; height: number };
 
 export function fitDesktopPetBounds(saved: Rectangle | null, workArea: Rectangle): Rectangle {
   const width = Math.min(Math.max(saved?.width ?? 220, 180), workArea.width);
-  const height = Math.min(Math.max(saved?.height ?? 280, 220), workArea.height);
+  const height = Math.min(Math.max(saved?.height ?? 320, 300), workArea.height);
   const defaultX = workArea.x + workArea.width - width - 24;
   const defaultY = workArea.y + workArea.height - height - 24;
   const x = Math.min(Math.max(saved?.x ?? defaultX, workArea.x), workArea.x + workArea.width - width);
