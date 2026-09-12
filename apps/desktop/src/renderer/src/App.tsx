@@ -543,6 +543,7 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [companionSettings, setCompanionSettings] = useState<CompanionSettings>({
     enabled: false, intervalMinutes: 180, quietStart: '23:00', quietEnd: '08:00', desktopPetEnabled: false,
+    desktopPetRoamingEnabled: true,
   });
   const [companionSaved, setCompanionSaved] = useState(false);
 
@@ -676,6 +677,10 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
         <small>在桌面上显示可拖动的角色小窗，点击可返回主界面。</small></span>
         <input type="checkbox" checked={companionSettings.desktopPetEnabled}
           onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, desktopPetEnabled: event.target.checked }); }} /></label>
+      <label className="toggle-setting"><span><strong>允许自主散步</strong>
+        <small>空闲时偶尔在当前屏幕内缓慢移动；聊天和错误动作不会被打断。</small></span>
+        <input type="checkbox" checked={companionSettings.desktopPetRoamingEnabled}
+          onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, desktopPetRoamingEnabled: event.target.checked }); }} /></label>
       <div className="form-grid three-column">
         <label><span>无互动间隔</span><select value={companionSettings.intervalMinutes}
           onChange={(event) => { setCompanionSaved(false); setCompanionSettings({ ...companionSettings, intervalMinutes: Number(event.target.value) }); }}>

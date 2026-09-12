@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   companionSettingsSave: 'companion-settings:save',
   companionFocusMain: 'companion:focus-main',
   companionClosePet: 'companion:close-pet',
+  companionInteractPet: 'companion:interact-pet',
 } as const;
 
 const TimeOfDaySchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
@@ -37,6 +38,7 @@ export const CompanionSettingsSchema = z.object({
   quietStart: TimeOfDaySchema,
   quietEnd: TimeOfDaySchema,
   desktopPetEnabled: z.boolean(),
+  desktopPetRoamingEnabled: z.boolean(),
 });
 export type CompanionSettings = z.infer<typeof CompanionSettingsSchema>;
 
@@ -328,6 +330,7 @@ export interface AiLoverDesktopApi {
     saveSettings(input: CompanionSettings): Promise<CompanionSettings>;
     getPetState(): Promise<DesktopPetRuntimeState>;
     onPetState(listener: (state: DesktopPetRuntimeState) => void): () => void;
+    interactPet(): Promise<void>;
     focusMain(): Promise<void>;
     closeDesktopPet(): Promise<void>;
   };

@@ -67,6 +67,7 @@ body:has(.desktop-pet-shell),
 .pet-name { padding: 5px 10px; background: rgb(255 255 255 / 86%); border-radius: 6px; box-shadow: 0 4px 14px rgb(30 25 35 / 12%); font-size: 12px; font-weight: 650; }
 .pet-close { position: absolute; z-index: 2; top: 8px; right: 8px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: #625c68; background: rgb(255 255 255 / 88%); border: 0; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag; }
 .pet-open { position: absolute; right: 10px; bottom: 10px; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; color: #fff; background: #a94756; border: 0; border-radius: 50%; box-shadow: 0 5px 14px rgb(66 35 43 / 24%); cursor: pointer; -webkit-app-region: no-drag; }
+.pet-react { position: absolute; left: 10px; bottom: 10px; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; color: #a94756; background: rgb(255 255 255 / 90%); border: 0; border-radius: 50%; box-shadow: 0 5px 14px rgb(66 35 43 / 18%); cursor: pointer; -webkit-app-region: no-drag; }
 
 .pet-action-walk-left { animation: pet-walk-left 2s ease-in-out 1; }
 .pet-action-walk-right { animation: pet-walk-right 2s ease-in-out 1; }

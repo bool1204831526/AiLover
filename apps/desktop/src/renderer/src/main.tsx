@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MessageCircle, X } from 'lucide-react';
+import { Heart, MessageCircle, X } from 'lucide-react';
 
 import type { CharacterSnapshot, CharacterVisualProfile, DesktopPetPack,
   DesktopPetRuntimeState } from '@ailover/contracts';
@@ -54,7 +54,8 @@ function DesktopPet(): React.JSX.Element {
   }} onPointerLeave={() => setLookFrame(null)}>
     <button className="pet-close" type="button" title="关闭桌面角色" aria-label="关闭桌面角色"
       onClick={() => void window.ailover?.companion.closeDesktopPet()}><X size={15} /></button>
-    <div className={`pet-character${petPack?.mode === 'actions' ? ` pet-action-${action}` : ''}`} title="拖动桌面角色">
+    <div className={`pet-character${petPack?.mode === 'actions' ? ` pet-action-${action}` : ''}`}
+      title="拖动桌面角色" onDoubleClick={() => void window.ailover?.companion.focusMain()}>
       <div className={`pet-portrait${petPack?.mode !== 'actions' && petPack ? ' pet-sprite-viewport' : ''}`}>{petPack?.mode !== 'actions' && petPack?.atlas
         ? <img className="pet-spritesheet" src={petPack.atlas.dataUrl} alt={character?.name ?? '角色'}
           style={{ height: `${petPack.atlas.spriteVersionNumber === 2 ? 1100 : 900}%`,
@@ -65,6 +66,8 @@ function DesktopPet(): React.JSX.Element {
         : <span>{character?.name.slice(0, 1) ?? 'A'}</span>}</div>
       <div className="pet-name">{character?.name ?? 'AiLover'}</div>
     </div>
+    <button className="pet-react" type="button" title="和角色互动" aria-label="和角色互动"
+      onClick={() => void window.ailover?.companion.interactPet()}><Heart size={16} aria-hidden="true" /></button>
     <button className="pet-open" type="button" title="打开 AiLover" aria-label="打开 AiLover"
       onClick={() => void window.ailover?.companion.focusMain()}><MessageCircle size={16} aria-hidden="true" /></button>
   </main>;

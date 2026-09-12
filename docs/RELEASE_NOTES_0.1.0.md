@@ -16,6 +16,7 @@
 - A draggable transparent desktop pet with separate-action WebP/PNG packs and Codex v1/v2 atlas support.
 - Event-driven pet reactions for model waiting, generation, completion, failure, positive interactions,
   proactive notifications and left/right window dragging.
+- Optional screen-bounded idle roaming, direct pet interaction, double-click opening and a pet context menu.
 
 ## Privacy
 

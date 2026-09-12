@@ -307,25 +307,30 @@ export class SqliteCompanionSettingsRepository {
   public get(): CompanionSettings & { lastPromptAt: Date | null } {
     const row = this.database.sqlite.prepare('SELECT * FROM companion_settings WHERE id = ?')
       .get('default') as { enabled: number; interval_minutes: number; quiet_start: string;
-        quiet_end: string; desktop_pet_enabled: number; last_prompt_at: string | null } | undefined;
+        quiet_end: string; desktop_pet_enabled: number; desktop_pet_roaming_enabled: number;
+        last_prompt_at: string | null } | undefined;
     if (!row) return { enabled: false, intervalMinutes: 180, quietStart: '23:00', quietEnd: '08:00',
-      desktopPetEnabled: false, lastPromptAt: null };
+      desktopPetEnabled: false, desktopPetRoamingEnabled: true, lastPromptAt: null };
     return { enabled: Boolean(row.enabled), intervalMinutes: row.interval_minutes,
       quietStart: row.quiet_start, quietEnd: row.quiet_end,
       desktopPetEnabled: Boolean(row.desktop_pet_enabled),
+      desktopPetRoamingEnabled: Boolean(row.desktop_pet_roaming_enabled),
       lastPromptAt: row.last_prompt_at ? new Date(row.last_prompt_at) : null };
   }
 
   public save(settings: CompanionSettings): void {
     this.database.sqlite.prepare(`INSERT INTO companion_settings
-      (id, enabled, interval_minutes, quiet_start, quiet_end, desktop_pet_enabled, last_prompt_at, updated_at)
-      VALUES ('default', ?, ?, ?, ?, ?, NULL, ?)
+      (id, enabled, interval_minutes, quiet_start, quiet_end, desktop_pet_enabled,
+        desktop_pet_roaming_enabled, last_prompt_at, updated_at)
+      VALUES ('default', ?, ?, ?, ?, ?, ?, NULL, ?)
       ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled,
         interval_minutes = excluded.interval_minutes, quiet_start = excluded.quiet_start,
         quiet_end = excluded.quiet_end, desktop_pet_enabled = excluded.desktop_pet_enabled,
+        desktop_pet_roaming_enabled = excluded.desktop_pet_roaming_enabled,
         updated_at = excluded.updated_at`).run(
       settings.enabled ? 1 : 0, settings.intervalMinutes, settings.quietStart,
-      settings.quietEnd, settings.desktopPetEnabled ? 1 : 0, new Date().toISOString(),
+      settings.quietEnd, settings.desktopPetEnabled ? 1 : 0,
+      settings.desktopPetRoamingEnabled ? 1 : 0, new Date().toISOString(),
     );
   }
 

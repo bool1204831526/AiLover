@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 
 import { arch, release } from 'node:os';
 import { basename, extname, join, resolve, sep } from 'node:path';
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray } from 'electron';
 
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
@@ -79,7 +79,11 @@ let desktopPetWindow: BrowserWindow | null = null;
 let companionTimer: NodeJS.Timeout | null = null;
 let desktopPetReactionTimer: NodeJS.Timeout | null = null;
 let desktopPetMoveTimer: NodeJS.Timeout | null = null;
+let desktopPetRoamTimer: NodeJS.Timeout | null = null;
+let desktopPetRoamAnimation: NodeJS.Timeout | null = null;
 let desktopPetActivityState: DesktopPetRuntimeState = 'idle';
+let lastDesktopPetMoveAt = 0;
+let desktopPetInteractionCount = 0;
 let tray: Tray | null = null;
 let isQuitting = false;
 
@@ -135,6 +139,52 @@ function setDesktopPetActivity(state: DesktopPetRuntimeState, resetAfterMs?: num
     }, resetAfterMs);
     desktopPetReactionTimer.unref();
   }
+}
+
+function stopDesktopPetRoamAnimation(): void {
+  if (desktopPetRoamAnimation) clearInterval(desktopPetRoamAnimation);
+  desktopPetRoamAnimation = null;
+}
+
+function strollDesktopPet(): void {
+  const window = desktopPetWindow;
+  if (!window || window.isDestroyed() || desktopPetActivityState !== 'idle'
+    || Date.now() - lastDesktopPetMoveAt < 1_000) return;
+  const bounds = window.getBounds();
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const minimumX = workArea.x;
+  const maximumX = workArea.x + workArea.width - bounds.width;
+  if (maximumX <= minimumX) return;
+  const roomLeft = bounds.x - minimumX;
+  const roomRight = maximumX - bounds.x;
+  const direction = roomRight < 90 ? -1 : roomLeft < 90 ? 1 : Math.random() < 0.5 ? -1 : 1;
+  const distance = Math.min(80 + Math.round(Math.random() * 100), direction > 0 ? roomRight : roomLeft);
+  if (distance < 24) return;
+  const startX = bounds.x;
+  const targetX = startX + direction * distance;
+  const startedAt = Date.now();
+  const duration = 1_400;
+  stopDesktopPetRoamAnimation();
+  desktopPetRoamAnimation = setInterval(() => {
+    if (!desktopPetWindow || desktopPetWindow.isDestroyed() || desktopPetActivityState !== 'idle') {
+      stopDesktopPetRoamAnimation();
+      return;
+    }
+    const progress = Math.min(1, (Date.now() - startedAt) / duration);
+    const eased = 0.5 - Math.cos(progress * Math.PI) / 2;
+    desktopPetWindow.setPosition(Math.round(startX + (targetX - startX) * eased), bounds.y, false);
+    if (progress >= 1) stopDesktopPetRoamAnimation();
+  }, 32);
+  desktopPetRoamAnimation.unref();
+}
+
+function syncDesktopPetRoaming(enabled: boolean): void {
+  if (desktopPetRoamTimer) clearInterval(desktopPetRoamTimer);
+  desktopPetRoamTimer = null;
+  stopDesktopPetRoamAnimation();
+  if (!enabled) return;
+  desktopPetRoamTimer = setInterval(strollDesktopPet, 24_000);
+  desktopPetRoamTimer.unref();
 }
 
 function encryptApiKey(apiKey: string): string {
@@ -437,21 +487,28 @@ function registerIpcHandlers(): void {
     const stored = companionSettingsRepository.get();
     return CompanionSettingsSchema.parse({ enabled: stored.enabled,
       intervalMinutes: stored.intervalMinutes, quietStart: stored.quietStart, quietEnd: stored.quietEnd,
-      desktopPetEnabled: stored.desktopPetEnabled });
+      desktopPetEnabled: stored.desktopPetEnabled,
+      desktopPetRoamingEnabled: stored.desktopPetRoamingEnabled });
   });
 
   ipcMain.handle(IPC_CHANNELS.companionSettingsSave, async (_event, input: unknown) => {
     const settings = CompanionSettingsSchema.parse(input);
     companionSettingsRepository.save(settings);
     syncDesktopPet(settings.desktopPetEnabled);
+    syncDesktopPetRoaming(settings.desktopPetEnabled && settings.desktopPetRoamingEnabled);
     return settings;
   });
 
   ipcMain.handle(IPC_CHANNELS.companionFocusMain, async () => focusMainWindow());
   ipcMain.handle(IPC_CHANNELS.desktopPetStateGet, async () => desktopPetActivityState);
+  ipcMain.handle(IPC_CHANNELS.companionInteractPet, async () => {
+    desktopPetInteractionCount += 1;
+    setDesktopPetActivity(desktopPetInteractionCount % 2 ? 'jumping' : 'waving', 2_400);
+  });
   ipcMain.handle(IPC_CHANNELS.companionClosePet, async () => {
     const stored = companionSettingsRepository.get();
     companionSettingsRepository.save({ ...stored, desktopPetEnabled: false });
+    syncDesktopPetRoaming(false);
     desktopPetWindow?.close();
   });
 
@@ -836,6 +893,7 @@ function createDesktopPetWindow(): BrowserWindow {
     const currentX = window.getBounds().x;
     const delta = currentX - previousX;
     previousX = currentX;
+    lastDesktopPetMoveAt = Date.now();
     if (Math.abs(delta) >= 1) emitDesktopPetState(delta > 0 ? 'running-right' : 'running-left');
     if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
     desktopPetMoveTimer = setTimeout(() => {
@@ -849,6 +907,27 @@ function createDesktopPetWindow(): BrowserWindow {
     if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
     desktopPetMoveTimer = null;
     if (desktopPetWindow === window) desktopPetWindow = null;
+  });
+  window.webContents.on('context-menu', () => {
+    const settings = companionSettingsRepository.get();
+    Menu.buildFromTemplate([
+      { label: '打开 AiLover', click: () => focusMainWindow() },
+      { label: '和角色互动', click: () => {
+        desktopPetInteractionCount += 1;
+        setDesktopPetActivity(desktopPetInteractionCount % 2 ? 'jumping' : 'waving', 2_400);
+      } },
+      { type: 'separator' },
+      { label: '允许自主散步', type: 'checkbox', checked: settings.desktopPetRoamingEnabled,
+        click: (item) => {
+          companionSettingsRepository.save({ ...settings, desktopPetRoamingEnabled: item.checked });
+          syncDesktopPetRoaming(item.checked);
+        } },
+      { label: '隐藏桌面角色', click: () => {
+        companionSettingsRepository.save({ ...settings, desktopPetEnabled: false });
+        syncDesktopPetRoaming(false);
+        window.close();
+      } },
+    ]).popup({ window });
   });
   loadRendererWindow(window, true);
   return window;
@@ -872,6 +951,7 @@ function createTray(): void {
       { label: '显示桌面角色', type: 'checkbox', checked: settings.desktopPetEnabled, click: (item) => {
         companionSettingsRepository.save({ ...settings, desktopPetEnabled: item.checked });
         syncDesktopPet(item.checked);
+        syncDesktopPetRoaming(item.checked && settings.desktopPetRoamingEnabled);
         rebuildMenu();
       } },
       { type: 'separator' },
@@ -904,7 +984,9 @@ void app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
   createTray();
-  syncDesktopPet(companionSettingsRepository.get().desktopPetEnabled);
+  const companionSettings = companionSettingsRepository.get();
+  syncDesktopPet(companionSettings.desktopPetEnabled);
+  syncDesktopPetRoaming(companionSettings.desktopPetEnabled && companionSettings.desktopPetRoamingEnabled);
   startupDurationMs = Math.round(performance.now() - processStartedAt);
   logger.info({ appVersion: app.getVersion() }, 'AiLover started');
   const character = await characterService.findCurrent();
@@ -931,5 +1013,7 @@ app.on('before-quit', () => {
   if (companionTimer) clearInterval(companionTimer);
   if (desktopPetReactionTimer) clearTimeout(desktopPetReactionTimer);
   if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
+  if (desktopPetRoamTimer) clearInterval(desktopPetRoamTimer);
+  stopDesktopPetRoamAnimation();
   database.close();
 });

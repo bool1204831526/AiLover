@@ -152,6 +152,7 @@ const api: AiLoverDesktopApi = {
       ipcRenderer.on(IPC_CHANNELS.desktopPetStateChanged, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.desktopPetStateChanged, handler);
     },
+    interactPet: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionInteractPet); },
     focusMain: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionFocusMain); },
     closeDesktopPet: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionClosePet); },
   },
