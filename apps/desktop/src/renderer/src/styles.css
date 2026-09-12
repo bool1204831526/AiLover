@@ -59,7 +59,6 @@ body:has(.desktop-pet-shell),
   top: 0;
   left: 0;
   width: 800%;
-  height: 1100%;
   max-width: none;
   object-fit: fill;
   image-rendering: auto;

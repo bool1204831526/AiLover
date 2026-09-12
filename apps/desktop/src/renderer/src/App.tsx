@@ -204,8 +204,8 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
       </section>
       <section className="pet-asset-section"><div className="settings-heading"><h3>桌宠动作素材</h3>
         <p>导入一个素材文件夹。推荐使用 Codex v2 图集，也兼容原有的逐动作文件。</p></div>
-        {petPack?.mode === 'codex-v2' ? <div className="pet-guide-note"><strong>{petPack.atlas?.displayName}</strong>
-          <p>Codex v2 · 9 组动作 · 16 个注视方向</p></div> : <div className="pet-action-requirements">
+        {petPack?.mode !== 'actions' && petPack ? <div className="pet-guide-note"><strong>{petPack.atlas?.displayName}</strong>
+          <p>{petPack.mode === 'codex-v2' ? 'Codex v2 · 9 组动作 · 16 个注视方向' : 'Codex v1 · 9 组标准动作'}</p></div> : <div className="pet-action-requirements">
           {petActionNames.map((action) =>
             <span className={petPack?.availableActions.includes(action) ? 'available' : ''} key={action}>
               {petPack?.availableActions.includes(action) ? <Check size={12} /> : null}
@@ -216,6 +216,8 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
           <div className="pet-guide-note"><strong>Codex v2 图集（推荐）</strong>
             <p>文件夹内放置 <code>pet.json</code> 和一张静态 <code>spritesheet.webp</code>。图集必须为 1536 x 2288 像素，8 列 11 行，每格 192 x 208 像素，透明背景。</p>
             <pre>{`{\n  "id": "my-pet",\n  "displayName": "我的桌宠",\n  "description": "角色说明",\n  "spriteVersionNumber": 2,\n  "spritesheetPath": "spritesheet.webp"\n}`}</pre></div>
+          <div className="pet-guide-note"><strong>Codex v1 图集（兼容）</strong>
+            <p>尺寸为 1536 x 1872 像素，8 列 9 行。清单可不写 <code>spriteVersionNumber</code>，支持 9 组标准动作，但没有注视方向。</p></div>
           <div className="pet-guide-note"><strong>逐动作文件（兼容）</strong>
             <p>适合已有的动画 WebP。使用下方标准文件名时无需清单。</p></div>
           <div className="pet-format-grid"><div><strong>推荐格式</strong><span>带透明背景的动画 WebP</span></div>

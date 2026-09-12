@@ -176,14 +176,18 @@ export const CodexPetManifestSchema = z.object({
   id: z.string().min(1).max(80),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).optional(),
-  spriteVersionNumber: z.preprocess((value) => value === undefined || value === '2' ? 2 : value, z.literal(2)),
+  spriteVersionNumber: z.preprocess((value) => {
+    if (value === undefined) return 1;
+    if (value === '1' || value === '2') return Number(value);
+    return value;
+  }, z.union([z.literal(1), z.literal(2)])),
   spritesheetPath: z.string().min(1),
 }).strip();
 export type CodexPetManifest = z.infer<typeof CodexPetManifestSchema>;
 
 export const DesktopPetPackSchema = z.object({
   version: z.number().int().positive(),
-  mode: z.enum(['actions', 'codex-v2']),
+  mode: z.enum(['actions', 'codex-v1', 'codex-v2']),
   availableActions: z.array(DesktopPetActionSchema),
   missingRecommended: z.array(DesktopPetActionSchema),
   actionDataUrls: z.partialRecord(DesktopPetActionSchema, z.string().startsWith('data:image/')),
@@ -191,13 +195,13 @@ export const DesktopPetPackSchema = z.object({
     id: z.string().min(1),
     displayName: z.string().min(1),
     description: z.string().optional(),
-    spriteVersionNumber: z.literal(2),
+    spriteVersionNumber: z.union([z.literal(1), z.literal(2)]),
     dataUrl: z.string().startsWith('data:image/'),
   }).optional(),
   message: z.string().min(1),
 }).superRefine((pack, context) => {
-  if (pack.mode === 'codex-v2' && !pack.atlas) {
-    context.addIssue({ code: 'custom', path: ['atlas'], message: 'Codex v2 pack requires an atlas' });
+  if (pack.mode !== 'actions' && !pack.atlas) {
+    context.addIssue({ code: 'custom', path: ['atlas'], message: 'Codex atlas pack requires an atlas' });
   }
 });
 export type DesktopPetPack = z.infer<typeof DesktopPetPackSchema>;

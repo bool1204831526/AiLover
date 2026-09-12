@@ -23,8 +23,9 @@ It contains the nine standard Codex animation rows and sixteen clockwise look di
 }
 ```
 
-For compatibility with early custom Codex pets, AiLover also accepts a missing
-`spriteVersionNumber` or the string value `"2"` when the atlas dimensions prove it is a v2 pack.
+AiLover also supports Codex v1 atlases. A manifest without `spriteVersionNumber` defaults to v1;
+its atlas must be 1536 x 1872 pixels (8 x 9). V1 includes the nine standard animation rows but no
+look-direction rows. String values `"1"` and `"2"` are accepted for compatibility.
 
 ## Compatible Format: Separate Action Files
 

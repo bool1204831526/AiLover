@@ -34,7 +34,7 @@ function DesktopPet(): React.JSX.Element {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (petPack?.mode !== 'codex-v2') return;
+    if (petPack?.mode === 'actions' || !petPack) return;
     const sequence: CodexPetAnimation[] = ['idle', 'waving', 'idle', 'jumping', 'waiting', 'running', 'review'];
     let sequenceIndex = 0;
     const timer = window.setInterval(() => {
@@ -43,9 +43,9 @@ function DesktopPet(): React.JSX.Element {
       setCodexFrameIndex(0);
     }, 5_500);
     return () => window.clearInterval(timer);
-  }, [petPack?.mode]);
+  }, [petPack]);
   useEffect(() => {
-    if (petPack?.mode !== 'codex-v2') return;
+    if (petPack?.mode === 'actions' || !petPack) return;
     const frame = codexPetFrame(codexAnimation, codexFrameIndex);
     const timer = window.setTimeout(() => setCodexFrameIndex((index) => index + 1), frame.duration);
     return () => window.clearTimeout(timer);
@@ -60,9 +60,10 @@ function DesktopPet(): React.JSX.Element {
     <button className="pet-close" type="button" title="关闭桌面角色" aria-label="关闭桌面角色"
       onClick={() => void window.ailover?.companion.closeDesktopPet()}><X size={15} /></button>
     <div className={`pet-character${petPack?.mode === 'actions' ? ` pet-action-${action}` : ''}`} title="拖动桌面角色">
-      <div className={`pet-portrait${petPack?.mode === 'codex-v2' ? ' pet-sprite-viewport' : ''}`}>{petPack?.mode === 'codex-v2' && petPack.atlas
+      <div className={`pet-portrait${petPack?.mode !== 'actions' && petPack ? ' pet-sprite-viewport' : ''}`}>{petPack?.mode !== 'actions' && petPack?.atlas
         ? <img className="pet-spritesheet" src={petPack.atlas.dataUrl} alt={character?.name ?? '角色'}
-          style={{ transform: `translate(${-atlasFrame.column * 12.5}%, ${-atlasFrame.row * (100 / 11)}%)` }} />
+          style={{ height: `${petPack.atlas.spriteVersionNumber === 2 ? 1100 : 900}%`,
+            transform: `translate(${-atlasFrame.column * 12.5}%, ${-atlasFrame.row * (100 / (petPack.atlas.spriteVersionNumber === 2 ? 11 : 9))}%)` }} />
         : actionImage
         ? <img src={actionImage} alt={character?.name ?? '角色'} />
         : visual?.currentAsset ? <img src={visual.currentAsset.dataUrl} alt={character?.name ?? '角色'} />

@@ -176,12 +176,13 @@ async function readDesktopPetPack(characterId: string) {
     const mimeType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : null;
     if (!mimeType) throw new Error('Codex v2 图集只支持 WebP 或 PNG。');
     const data = await readFile(join(directory, fileName));
-    return DesktopPetPackSchema.parse({ version: pointer.version, mode: 'codex-v2',
+    const mode = atlasManifest.spriteVersionNumber === 2 ? 'codex-v2' : 'codex-v1';
+    return DesktopPetPackSchema.parse({ version: pointer.version, mode,
       availableActions: [], missingRecommended: [], actionDataUrls: {},
       atlas: { id: atlasManifest.id, displayName: atlasManifest.displayName,
-        description: atlasManifest.description, spriteVersionNumber: 2,
+        description: atlasManifest.description, spriteVersionNumber: atlasManifest.spriteVersionNumber,
         dataUrl: `data:${mimeType};base64,${data.toString('base64')}` },
-      message: `已启用 Codex v2 动画图集版本 ${pointer.version}` });
+      message: `已启用 Codex v${atlasManifest.spriteVersionNumber} 动画图集版本 ${pointer.version}` });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -228,8 +229,9 @@ async function validateCodexPetAtlas(sourceDirectory: string, manifest: CodexPet
   if (extension === '.webp' && isAnimatedWebP(data)) throw new Error('Codex v2 spritesheet.webp 必须是静态图集，不能是动画 WebP。');
   const size = extension === '.webp' ? readWebPDimensions(data) : readPngDimensions(data);
   if (!size) throw new Error(`${fileName} 不是有效的图片。`);
-  if (size.width !== 1536 || size.height !== 2288) {
-    throw new Error(`Codex v2 图集尺寸必须是 1536 x 2288，当前为 ${size.width} x ${size.height}。`);
+  const expectedHeight = manifest.spriteVersionNumber === 2 ? 2288 : 1872;
+  if (size.width !== 1536 || size.height !== expectedHeight) {
+    throw new Error(`Codex v${manifest.spriteVersionNumber} 图集尺寸必须是 1536 x ${expectedHeight}，当前为 ${size.width} x ${size.height}。`);
   }
   return info.size;
 }
