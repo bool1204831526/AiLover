@@ -63,3 +63,7 @@
 # Future intention lifecycle
 
 - Added deterministic return/keyword triggering and expiry transitions for generated intentions.
+
+# Memory Center corrections
+
+- Added traceable local correction and soft-delete operations for memory records.

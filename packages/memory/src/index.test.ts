@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, correctMemory, intentionsFromMemories, markMemoryDeleted, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -96,6 +96,14 @@ it('builds a bounded memory center view without superseded entries', () => {
   });
   const result = buildMemoryCenterEntries([make('old', 'active', '2026-09-01'), make('hidden', 'superseded', '2026-09-12'), make('new', 'active', '2026-09-11')], 1);
   expect(result.map(({ id }) => id)).toEqual(['new']);
+});
+
+it('corrects and safely deletes a memory without physical removal', () => {
+  const memory = { id: 'm', userId: 'u', characterId: 'c', type: 'preference' as const, subject: '咖啡', content: '我喜欢咖啡', normalizedKey: 'preference:咖啡', confidence: 0.9, importance: 0.5, emotionalWeight: 0.2, polarity: 'positive' as const, recallStrength: 1, reinforcementCount: 1, state: 'active' as const, firstSeenAt: new Date('2026-09-01'), lastSeenAt: new Date('2026-09-01'), lastRecalledAt: null, expiresAt: null, evidence: '我喜欢咖啡' };
+  const corrected = correctMemory(memory, { content: '我更喜欢拿铁', importance: 2 }, new Date('2026-09-12'));
+  expect(corrected.content).toBe('我更喜欢拿铁');
+  expect(corrected.importance).toBe(1);
+  expect(markMemoryDeleted(corrected)).toMatchObject({ state: 'expired', recallStrength: 0 });
 });
 
 describe('MemoryService', () => {

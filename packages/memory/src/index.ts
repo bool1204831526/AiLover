@@ -37,6 +37,22 @@ export function buildMemoryCenterEntries(memories: StoredMemory[], limit = 100):
       importance, state, firstSeenAt, lastSeenAt, expiresAt, evidence }));
 }
 
+export function correctMemory(
+  memory: StoredMemory,
+  patch: { content?: string; subject?: string; type?: MemoryType; importance?: number; evidence?: string },
+  at: Date,
+): StoredMemory {
+  const content = patch.content?.trim() || memory.content;
+  return { ...memory, content, subject: patch.subject?.trim() || memory.subject,
+    type: patch.type ?? memory.type,
+    importance: Math.max(0, Math.min(1, patch.importance ?? memory.importance)),
+    evidence: patch.evidence?.trim() || memory.evidence, lastSeenAt: at };
+}
+
+export function markMemoryDeleted(memory: StoredMemory): StoredMemory {
+  return { ...memory, state: 'expired', recallStrength: 0 };
+}
+
 export type RecalledMemory = StoredMemory & { score: number };
 
 export interface EmbeddingStore {
