@@ -18,7 +18,7 @@ import {
   SqliteSelfModelRepository,
   SqliteCompanionSettingsRepository,
   SqliteDesktopPetWindowStateRepository,
-  createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
+  createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, prepareRestoredDatabase, validateRestoredDatabase,
 } from './index';
 
 const paths: string[] = [];
@@ -75,7 +75,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(15);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -83,6 +83,26 @@ describe('database backup safety', () => {
       .run(999, new Date().toISOString());
     snapshot.close();
     expect(() => validateRestoredDatabase(snapshotPath)).toThrow('更高版本');
+  });
+});
+
+describe('database migrations', () => {
+  it('upgrades schema 15 to audited memory resolutions without losing existing data', () => {
+    const path = join(tmpdir(), `ailover-migration-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const legacy = openAppDatabase(path);
+    legacy.sqlite.prepare("UPDATE users SET display_name = '迁移保留' WHERE id = 'local-user'").run();
+    legacy.sqlite.exec('DROP TABLE memory_resolutions');
+    legacy.sqlite.prepare('DELETE FROM schema_migrations WHERE version = 16').run();
+    legacy.close();
+    const upgraded = openAppDatabase(path);
+    expect(upgraded.sqlite.prepare('SELECT MAX(version) AS version FROM schema_migrations').get())
+      .toEqual({ version: 16 });
+    expect(upgraded.sqlite.prepare("SELECT display_name FROM users WHERE id = 'local-user'").get())
+      .toEqual({ display_name: '迁移保留' });
+    expect(upgraded.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_resolutions'").get())
+      .toEqual({ name: 'memory_resolutions' });
+    upgraded.close();
   });
 });
 
@@ -317,6 +337,38 @@ describe('SqliteMemoryRepository', () => {
       { memoryId: 'memory-conflict', relation: 'contradicts', direction: 'incoming', state: 'active' },
     ]);
     expect(await memoryRepository.getRelations('another-character', 'memory-fts')).toEqual([]);
+    expect(await memoryRepository.resolve('another-character', { memoryId: 'memory-conflict',
+      relatedMemoryId: 'memory-fts', action: 'choose-current' }, 'resolution-denied', new Date())).toBe(false);
+    expect(await memoryRepository.resolve(character.id, { memoryId: 'memory-conflict',
+      relatedMemoryId: 'memory-fts', action: 'choose-related' }, 'resolution-choose',
+    new Date('2026-09-13T00:00:00Z'))).toBe(true);
+    expect((await memoryRepository.listActive(character.id)).map(({ id }) => id)).toEqual(['memory-fts']);
+    expect(await memoryRepository.getRelations(character.id, 'memory-conflict')).toMatchObject([
+      { resolution: 'choose-related' },
+    ]);
+    expect(await memoryRepository.getRelations(character.id, 'memory-fts')).toMatchObject([
+      { resolution: 'choose-current' },
+    ]);
+    expect(await memoryRepository.resolve(character.id, { memoryId: 'memory-conflict',
+      relatedMemoryId: 'memory-fts', action: 'keep-both' }, 'resolution-both',
+    new Date('2026-09-13T01:00:00Z'))).toBe(true);
+    const kept = await memoryRepository.listActive(character.id);
+    expect(kept).toHaveLength(2);
+    expect(new Set(kept.map(({ normalizedKey }) => normalizedKey)).size).toBe(2);
+    expect(await memoryRepository.resolve(character.id, { memoryId: 'memory-conflict',
+      relatedMemoryId: 'memory-fts', action: 'keep-both' }, 'resolution-both-again',
+    new Date('2026-09-13T01:30:00Z'))).toBe(true);
+    expect((await memoryRepository.listActive(character.id)).some(
+      ({ normalizedKey }) => normalizedKey.includes(':context:') && normalizedKey.split(':context:').length > 2,
+    )).toBe(false);
+    expect(await memoryRepository.resolve(character.id, { memoryId: 'memory-conflict',
+      relatedMemoryId: 'memory-fts', action: 'merge', mergedContent: '我对手冲咖啡的喜好取决于场景' },
+    'resolution-merge', new Date('2026-09-13T02:00:00Z'))).toBe(true);
+    expect((await memoryRepository.listActive(character.id))[0]).toMatchObject({
+      id: 'memory-conflict', content: '我对手冲咖啡的喜好取决于场景', reinforcementCount: 3,
+    });
+    expect(database.sqlite.prepare('SELECT COUNT(*) AS count FROM memory_resolutions').get())
+      .toEqual({ count: 4 });
     database.close();
   });
 });

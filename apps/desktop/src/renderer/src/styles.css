@@ -1118,6 +1118,9 @@ button:disabled {
 .memory-relation { margin-top: 9px; padding-left: 10px; border-left: 2px solid #c89aa1; }
 .memory-relation span { color: #8b4450; font-size: 12px; }
 .memory-relation p { margin: 3px 0 0; color: #55585c; font-size: 13px; }
+.memory-resolution-actions { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; }
+.memory-resolution-actions button { border: 0; padding: 2px 0; background: transparent; color: #8b4450; cursor: pointer; font-size: 12px; }
+.memory-resolution-actions button:disabled { cursor: wait; opacity: .45; }
 .memory-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
 .memory-entry-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: #a94756; cursor: pointer; padding: 3px 0; }
 @media (max-width: 980px) { .memory-toolbar { grid-template-columns: 1fr 1fr; } .memory-search { grid-column: 1 / -1; } }

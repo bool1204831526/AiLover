@@ -17,7 +17,7 @@ import {
   RelationshipSummarySchema,
   RelationshipTimelineSchema,
   PersonalityEvidenceSummariesSchema,
-  MemoryCenterEntriesSchema,
+  MemoryCenterEntriesSchema, MemoryResolutionSchema,
   MemoryCorrectionSchema,
   CharacterVisualProfileSchema,
   ImageCapabilitiesSchema,
@@ -118,6 +118,8 @@ const api: AiLoverDesktopApi = {
     correct: async (input) => { const value = MemoryCorrectionSchema.parse(input); await ipcRenderer.invoke(IPC_CHANNELS.memoryCorrect, value); },
     delete: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.memoryDelete, id); },
     restore: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.memoryRestore, id); },
+    resolve: async (input) => { const value = MemoryResolutionSchema.parse(input);
+      await ipcRenderer.invoke(IPC_CHANNELS.memoryResolve, value); },
   },
   visuals: {
     get: async () => {

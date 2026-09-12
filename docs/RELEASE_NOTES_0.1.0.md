@@ -77,6 +77,8 @@
 - Added audited undo for user-deleted memories while keeping naturally expired plans non-restorable.
 - Added expandable evidence history, reinforcement counts and character-scoped conflict/replacement links.
 - Distinguished active, naturally expired, user-deleted and superseded memory lifecycle states.
+- Added guided conflict resolution to select either fact, preserve context-dependent alternatives or merge evidence-backed memories.
+- Added schema 16 resolution audits with preserved prior state and an upgrade test from schema 15.
 
 # Consolidated memory persistence
 

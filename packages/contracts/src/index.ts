@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   personalityEvidenceGet: 'personality-evidence:get',
   memoryList: 'memory:list',
   memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete', memoryRestore: 'memory:restore',
+  memoryResolve: 'memory:resolve',
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
@@ -332,13 +333,23 @@ export const MemoryCenterEntrySchema = z.object({
     excerpt: z.string(), evidence: z.string(), createdAt: z.iso.datetime() })).max(20),
   relations: z.array(z.object({ memoryId: z.string().min(1), subject: z.string(), content: z.string(),
     state: z.enum(['active', 'superseded', 'expired']), relation: z.enum(['contradicts', 'supersedes']),
-    direction: z.enum(['outgoing', 'incoming']) })).max(20),
+    direction: z.enum(['outgoing', 'incoming']),
+    resolution: z.enum(['choose-current', 'choose-related', 'keep-both', 'merge']).nullable() })).max(20),
   canRestore: z.boolean(),
 });
 export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);
 export type MemoryCenterEntry = z.infer<typeof MemoryCenterEntrySchema>;
 export const MemoryCorrectionSchema = z.object({ id: z.string().min(1), content: z.string().trim().min(1).max(2000), importance: z.number().min(0).max(1) });
 export type MemoryCorrection = z.infer<typeof MemoryCorrectionSchema>;
+export const MemoryResolutionSchema = z.object({
+  memoryId: z.string().min(1), relatedMemoryId: z.string().min(1),
+  action: z.enum(['choose-current', 'choose-related', 'keep-both', 'merge']),
+  mergedContent: z.string().trim().min(1).max(2000).optional(),
+}).superRefine((value, context) => {
+  if (value.memoryId === value.relatedMemoryId) context.addIssue({ code: 'custom', message: '不能处理同一条记忆' });
+  if (value.action === 'merge' && !value.mergedContent) context.addIssue({ code: 'custom', message: '合并内容不能为空' });
+});
+export type MemoryResolution = z.infer<typeof MemoryResolutionSchema>;
 
 export interface AiLoverDesktopApi {
   bootstrap(): Promise<BootstrapResponse>;
@@ -367,7 +378,8 @@ export interface AiLoverDesktopApi {
   };
   personality: { getEvidence(): Promise<PersonalityEvidenceSummary[]> };
   memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>;
-    delete(id: string): Promise<void>; restore(id: string): Promise<void> };
+    delete(id: string): Promise<void>; restore(id: string): Promise<void>;
+    resolve(input: MemoryResolution): Promise<void> };
   visuals: {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;

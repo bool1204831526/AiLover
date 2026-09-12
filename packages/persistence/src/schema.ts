@@ -197,3 +197,13 @@ export const memoryDeletions = sqliteTable('memory_deletions', {
   characterId: text('character_id').notNull().references(() => characters.id),
   deletedAt: text('deleted_at').notNull(),
 });
+
+export const memoryResolutions = sqliteTable('memory_resolutions', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  memoryId: text('memory_id').notNull().references(() => memories.id),
+  relatedMemoryId: text('related_memory_id').notNull().references(() => memories.id),
+  action: text('action').notNull(), chosenMemoryId: text('chosen_memory_id').references(() => memories.id),
+  mergedContent: text('merged_content'), previousState: text('previous_state').notNull(),
+  createdAt: text('created_at').notNull(),
+});

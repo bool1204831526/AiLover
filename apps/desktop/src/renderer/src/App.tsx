@@ -160,6 +160,7 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
   const [typeFilter, setTypeFilter] = useState<'all' | MemoryCenterEntry['type']>('all');
   const [stateFilter, setStateFilter] = useState<'all' | MemoryCenterEntry['lifecycle']>('all');
   const [sort, setSort] = useState<'recent' | 'important'>('recent');
+  const [resolving, setResolving] = useState<string | null>(null);
   useEffect(() => {
     setEntries([]); setFailed(false);
     if (!character || !window.ailover) return;
@@ -187,6 +188,26 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
   async function restore(entry: MemoryCenterEntry): Promise<void> {
     if (!window.ailover) return;
     await window.ailover.memory.restore(entry.id); setEntries(await window.ailover.memory.list());
+  }
+  async function resolveRelation(entry: MemoryCenterEntry,
+    relation: MemoryCenterEntry['relations'][number],
+    action: 'choose-current' | 'choose-related' | 'keep-both' | 'merge'): Promise<void> {
+    if (!window.ailover) return;
+    let mergedContent: string | undefined;
+    if (action === 'merge') {
+      const value = window.prompt('合并后的记忆内容', `${entry.content}；${relation.content}`);
+      if (!value?.trim()) return;
+      mergedContent = value.trim();
+    } else if (action !== 'keep-both' && !window.confirm(
+      action === 'choose-current' ? '将这条设为当前记忆，另一条保留为历史版本？' : '改用另一条作为当前记忆？',
+    )) return;
+    const key = `${entry.id}:${relation.memoryId}`;
+    setResolving(key);
+    try {
+      await window.ailover.memory.resolve({ memoryId: entry.id, relatedMemoryId: relation.memoryId,
+        action, ...(mergedContent ? { mergedContent } : {}) });
+      setEntries(await window.ailover.memory.list());
+    } finally { setResolving(null); }
   }
   return <><header className="conversation-header"><div><span className="eyebrow">长期记忆</span>
     <h2>{character ? `${character.name}记住的事` : '尚未相遇'}</h2></div></header>
@@ -219,6 +240,17 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
                {entry.relations.map((relation) => <div className="memory-relation" key={`${relation.memoryId}-${relation.relation}-${relation.direction}`}>
                  <span>{relation.relation === 'contradicts' ? '存在冲突' : '发生替代'}</span>
                  <p>{relation.subject}：{relation.content}</p>
+                 {relation.resolution && <small>已处理：{memoryResolutionLabel(relation.resolution)}</small>}
+                 <div className="memory-resolution-actions">
+                     <button type="button" disabled={resolving !== null}
+                       onClick={() => void resolveRelation(entry, relation, 'choose-current')}>保留这条</button>
+                     <button type="button" disabled={resolving !== null}
+                       onClick={() => void resolveRelation(entry, relation, 'choose-related')}>改用另一条</button>
+                     <button type="button" disabled={resolving !== null}
+                       onClick={() => void resolveRelation(entry, relation, 'keep-both')}>两者并存</button>
+                     <button type="button" disabled={resolving !== null}
+                       onClick={() => void resolveRelation(entry, relation, 'merge')}>合并</button>
+                 </div>
                </div>)}
              </details>}
             {entry.state === 'active' && <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>}
@@ -234,6 +266,12 @@ function memoryTypeLabel(type: MemoryCenterEntry['type']): string {
 function memoryLifecycleLabel(lifecycle: MemoryCenterEntry['lifecycle']): string {
   return ({ active: '有效', 'naturally-expired': '自然过期', 'user-deleted': '用户删除',
     superseded: '已被替代' })[lifecycle];
+}
+
+function memoryResolutionLabel(resolution: MemoryCenterEntry['relations'][number]['resolution']): string {
+  if (!resolution) return '';
+  return ({ 'choose-current': '以这条为准', 'choose-related': '以另一条为准',
+    'keep-both': '两者并存', merge: '已合并' })[resolution];
 }
 
 function CharacterView({ character, visual, onVisualChange, onCreate }: {

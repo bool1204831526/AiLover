@@ -12,7 +12,7 @@ import {
   ConversationSnapshotSchema, ConversationContextInputSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
-  MemoryCorrectionSchema,
+  MemoryCorrectionSchema, MemoryResolutionSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
   DesktopPetRuntimeStateSchema,
   type CodexPetManifest, type DesktopPetPackManifest,
@@ -517,6 +517,13 @@ function registerIpcHandlers(): void {
     const current = await characterService.findCurrent();
     if (!current || !(await memoryRepository.restore(current.id, id, new Date()))) {
       throw new Error('这条记忆无法恢复');
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.memoryResolve, async (_event, input: unknown) => {
+    const value = MemoryResolutionSchema.parse(input);
+    const current = await characterService.findCurrent();
+    if (!current || !(await memoryRepository.resolve(current.id, value, randomUUID(), new Date()))) {
+      throw new Error('关联记忆不存在、已变化或不属于当前角色');
     }
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
+  MemoryResolutionSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
   DesktopPetRuntimeStateSchema,
 } from './index';
@@ -79,5 +80,14 @@ describe('shared contracts', () => {
     expect(DesktopPetRuntimeStateSchema.parse('running-left')).toBe('running-left');
     expect(DesktopPetRuntimeStateSchema.parse('sleeping')).toBe('sleeping');
     expect(() => DesktopPetRuntimeStateSchema.parse('dancing')).toThrow();
+  });
+
+  it('validates guided memory conflict resolutions', () => {
+    expect(MemoryResolutionSchema.parse({ memoryId: 'new', relatedMemoryId: 'old',
+      action: 'keep-both' }).action).toBe('keep-both');
+    expect(() => MemoryResolutionSchema.parse({ memoryId: 'same', relatedMemoryId: 'same',
+      action: 'choose-current' })).toThrow();
+    expect(() => MemoryResolutionSchema.parse({ memoryId: 'new', relatedMemoryId: 'old',
+      action: 'merge' })).toThrow();
   });
 });

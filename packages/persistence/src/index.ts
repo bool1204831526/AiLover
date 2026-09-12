@@ -508,10 +508,21 @@ export class SqliteMemoryRepository implements MemoryRepository {
   public async getRelations(characterId: string, memoryId: string): Promise<{
     memoryId: string; subject: string; content: string; state: StoredMemory['state'];
     relation: 'contradicts' | 'supersedes'; direction: 'outgoing' | 'incoming';
+    resolution: 'choose-current' | 'choose-related' | 'keep-both' | 'merge' | null;
   }[]> {
     const rows = this.database.sqlite.prepare(`SELECT related.id, related.subject, related.content,
       related.state, memory_links.relation,
-      CASE WHEN memory_links.from_memory_id = anchor.id THEN 'outgoing' ELSE 'incoming' END AS direction
+      CASE WHEN memory_links.from_memory_id = anchor.id THEN 'outgoing' ELSE 'incoming' END AS direction,
+      (SELECT CASE
+          WHEN action = 'choose-current' AND memory_id = anchor.id THEN 'choose-current'
+          WHEN action = 'choose-current' THEN 'choose-related'
+          WHEN action = 'choose-related' AND related_memory_id = anchor.id THEN 'choose-current'
+          WHEN action = 'choose-related' THEN 'choose-related'
+          ELSE action END
+        FROM memory_resolutions WHERE character_id = anchor.character_id
+        AND ((memory_id = anchor.id AND related_memory_id = related.id)
+          OR (memory_id = related.id AND related_memory_id = anchor.id))
+        ORDER BY created_at DESC LIMIT 1) AS resolution
       FROM memories AS anchor
       JOIN memory_links ON anchor.id IN (memory_links.from_memory_id, memory_links.to_memory_id)
       JOIN memories AS related ON related.id = CASE WHEN memory_links.from_memory_id = anchor.id
@@ -520,9 +531,62 @@ export class SqliteMemoryRepository implements MemoryRepository {
       ORDER BY memory_links.created_at DESC LIMIT 20`).all(memoryId, characterId, characterId) as {
         id: string; subject: string; content: string; state: StoredMemory['state'];
         relation: 'contradicts' | 'supersedes'; direction: 'outgoing' | 'incoming';
+        resolution: 'choose-current' | 'choose-related' | 'keep-both' | 'merge' | null;
       }[];
     return rows.map((row) => ({ memoryId: row.id, subject: row.subject, content: row.content,
-      state: row.state, relation: row.relation, direction: row.direction }));
+      state: row.state, relation: row.relation, direction: row.direction, resolution: row.resolution }));
+  }
+
+  public async resolve(characterId: string, input: { memoryId: string; relatedMemoryId: string;
+    action: 'choose-current' | 'choose-related' | 'keep-both' | 'merge'; mergedContent?: string | undefined },
+  id: string, now: Date): Promise<boolean> {
+    return this.database.sqlite.transaction(() => {
+      const memories = this.database.sqlite.prepare(`SELECT * FROM memories WHERE character_id = ?
+        AND id IN (?, ?)`).all(characterId, input.memoryId, input.relatedMemoryId) as MemoryRow[];
+      if (memories.length !== 2) return false;
+      const linked = this.database.sqlite.prepare(`SELECT 1 FROM memory_links WHERE
+        (from_memory_id = ? AND to_memory_id = ?) OR (from_memory_id = ? AND to_memory_id = ?)`)
+        .get(input.memoryId, input.relatedMemoryId, input.relatedMemoryId, input.memoryId);
+      if (!linked) return false;
+      const current = memories.find((memory) => memory.id === input.memoryId)!;
+      const related = memories.find((memory) => memory.id === input.relatedMemoryId)!;
+      const canonicalKey = current.normalized_key.split(':context:')[0] ?? current.normalized_key;
+      let chosenId: string | null = null;
+      if (input.action === 'keep-both') {
+        this.database.sqlite.prepare(`UPDATE memories SET state = 'active', recall_strength = MAX(recall_strength, 0.5),
+          normalized_key = CASE WHEN id = ? AND instr(normalized_key, ':context:') = 0
+            THEN normalized_key || ':context:' || substr(id, 1, 8) ELSE normalized_key END,
+          last_seen_at = ? WHERE character_id = ? AND id IN (?, ?)`).run(
+          input.relatedMemoryId, now.toISOString(), characterId, input.memoryId, input.relatedMemoryId);
+      } else {
+        chosenId = input.action === 'choose-related' ? input.relatedMemoryId : input.memoryId;
+        const replacedId = chosenId === input.memoryId ? input.relatedMemoryId : input.memoryId;
+        this.database.sqlite.prepare(`UPDATE memories SET state = 'active', recall_strength = MAX(recall_strength, 0.7),
+          normalized_key = ?, last_seen_at = ? WHERE id = ? AND character_id = ?`)
+          .run(canonicalKey, now.toISOString(), chosenId, characterId);
+        this.database.sqlite.prepare(`UPDATE memories SET state = 'superseded', recall_strength = 0
+          WHERE id = ? AND character_id = ?`).run(replacedId, characterId);
+        if (input.action === 'merge') {
+          this.database.sqlite.prepare(`UPDATE memories SET content = ?, importance = MAX(importance, ?)
+            WHERE id = ? AND character_id = ?`).run(input.mergedContent, related.importance, chosenId, characterId);
+          this.database.sqlite.prepare(`INSERT OR IGNORE INTO memory_sources(memory_id, message_id, evidence, created_at)
+            SELECT ?, message_id, evidence, created_at FROM memory_sources WHERE memory_id = ?`)
+            .run(chosenId, replacedId);
+          this.database.sqlite.prepare(`UPDATE memories SET reinforcement_count =
+            (SELECT COUNT(*) FROM memory_sources WHERE memory_id = ?) WHERE id = ?`).run(chosenId, chosenId);
+          this.database.sqlite.prepare(`INSERT OR IGNORE INTO memory_links(from_memory_id, to_memory_id, relation, created_at)
+            VALUES (?, ?, 'supersedes', ?)`).run(chosenId, replacedId, now.toISOString());
+        }
+      }
+      this.database.sqlite.prepare(`INSERT INTO memory_resolutions(id, character_id, memory_id,
+        related_memory_id, action, chosen_memory_id, merged_content, previous_state, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, characterId, input.memoryId, input.relatedMemoryId,
+        input.action, chosenId, input.mergedContent ?? null, JSON.stringify({
+          current: { id: current.id, state: current.state, content: current.content },
+          related: { id: related.id, state: related.state, content: related.content },
+        }), now.toISOString());
+      return true;
+    })();
   }
 
   public async updateStrength(id: string, strength: number, state: StoredMemory['state']): Promise<void> {
