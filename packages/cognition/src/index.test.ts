@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { PersonalityValues } from '@ailover/domain';
 
 import {
-  analyzeInteraction, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
+  analyzeInteraction, applyEmotionalAssociations, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
   createResponsePlan, projectPersonality, projectSelfModel, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
   type ReflectionRecord,
 } from './index';
@@ -18,6 +18,21 @@ const currentSnapshot = (personality: PersonalityValues = baseline): CognitionSn
     familiarity: 0.4, comfort: 0.5, conflict: 0.1 },
   personality, reason: 'test', sourceMessageId: 'message-current',
   ruleVersion: COGNITION_RULE_VERSION, recordedAt: new Date('2026-09-11T00:00:00Z'),
+});
+
+describe('emotional associations', () => {
+  it('nudges bounded emotion from relevant experiences without runaway changes', () => {
+    const result = applyEmotionalAssociations(currentSnapshot().emotion, [
+      { relevance: 1, emotionalWeight: 1, userEmotion: '积极', relationshipRelevance: 0.9 },
+      { relevance: 1, emotionalWeight: 1, userEmotion: '难过', relationshipRelevance: 0.9 },
+      { relevance: 1, emotionalWeight: 1, userEmotion: '开心', relationshipRelevance: 0.9 },
+      { relevance: 1, emotionalWeight: 1, userEmotion: '开心', relationshipRelevance: 0.9 },
+    ]);
+    expect(result.valence).toBeGreaterThan(currentSnapshot().emotion.valence);
+    expect(result.valence - currentSnapshot().emotion.valence).toBeLessThanOrEqual(0.12);
+    expect(result.security).toBeGreaterThan(currentSnapshot().emotion.security);
+    expect(Object.values(result).every((value) => value >= 0 && value <= 1)).toBe(true);
+  });
 });
 
 class MemoryCognitionRepository implements CognitionRepository {

@@ -9,6 +9,44 @@ export type EmotionState = {
   affection: number;
 };
 
+export type EmotionalAssociation = {
+  relevance: number;
+  emotionalWeight: number;
+  userEmotion?: string | null;
+  relationshipRelevance?: number;
+};
+
+/** Applies only a bounded echo of relevant past experiences. */
+export function applyEmotionalAssociations(
+  emotion: EmotionState,
+  associations: EmotionalAssociation[],
+): EmotionState {
+  let valenceDelta = 0;
+  let arousalDelta = 0;
+  let securityDelta = 0;
+  let affectionDelta = 0;
+  for (const association of associations.slice(0, 3)) {
+    const weight = Math.max(0, Math.min(1, association.relevance)) *
+      Math.max(0, Math.min(1, association.emotionalWeight));
+    const text = association.userEmotion ?? '';
+    const sign = /(难过|失望|崩溃|挫折|生气|害怕|压力|焦虑)/.test(text) ? -1 :
+      /(开心|高兴|成功|完成|积极)/.test(text) ? 1 : 0;
+    valenceDelta += sign * weight * 0.06;
+    arousalDelta += sign < 0 ? weight * 0.025 : weight * 0.012;
+    if ((association.relationshipRelevance ?? 0) >= 0.7) {
+      securityDelta += sign < 0 ? -weight * 0.025 : weight * 0.018;
+      affectionDelta += weight * 0.015;
+    }
+  }
+  const bounded = (value: number, delta: number) => Math.max(0, Math.min(1, value + delta));
+  return {
+    valence: bounded(emotion.valence, Math.max(-0.12, Math.min(0.12, valenceDelta))),
+    arousal: bounded(emotion.arousal, Math.max(-0.08, Math.min(0.08, arousalDelta))),
+    security: bounded(emotion.security, Math.max(-0.08, Math.min(0.08, securityDelta))),
+    affection: bounded(emotion.affection, Math.max(-0.06, Math.min(0.06, affectionDelta))),
+  };
+}
+
 export type RelationshipState = {
   trust: number;
   intimacy: number;

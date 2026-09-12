@@ -51,3 +51,7 @@
   compatibility check on a separate clean machine or virtual machine.
 - Backups use JSON/base64 and are limited to 512 MB of decoded data and 20 MB per asset.
 - Deleting application data does not delete backup files previously exported elsewhere by the user.
+# Long-term emotional association
+
+- Added a local bounded projection for emotional echoes from relevant episodic experiences.
+- Associations are limited to three items and never expose raw internal scores to the model.
