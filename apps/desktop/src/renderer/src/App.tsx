@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  ArrowDown, Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
+  ArrowDown, Brain, Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
   RotateCcw, Search, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
   UserRound, X,
 } from 'lucide-react';
@@ -9,6 +9,7 @@ import type {
   BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
   RelationshipSummary, CompanionSettings,
+  MemoryCenterEntry,
   DesktopPetPack,
 } from '@ailover/contracts';
 import { retainRecentMessages } from '@ailover/application';
@@ -16,6 +17,7 @@ import { retainRecentMessages } from '@ailover/application';
 const navigation = [
   { id: 'chat', label: '对话', icon: MessageCircle }, { id: 'character', label: '角色', icon: UserRound },
   { id: 'relationship', label: '关系', icon: Heart }, { id: 'settings', label: '设置', icon: Settings },
+  { id: 'memory', label: '记忆', icon: Brain },
 ];
 const templates = [
   { id: 'gentle', name: '温柔', description: '体贴、平和，善于倾听' },
@@ -120,7 +122,8 @@ export function App(): React.JSX.Element {
         : activeSection === 'relationship'
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
-            onCreate={() => setCreatorOpen(true)} /> : <>
+            onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
+              ? <MemoryView character={character} /> : <>
         <header className="conversation-header"><div><span className="eyebrow">当前对话</span>
           <h2>{character ? `与${character.name}的对话` : '新的相遇'}</h2></div>
           <button className="icon-button" type="button" aria-label="对话设置" title="对话设置">
@@ -141,6 +144,29 @@ export function App(): React.JSX.Element {
         setActiveSection('chat');
       }} />}
   </main>;
+}
+
+function MemoryView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
+  const [entries, setEntries] = useState<MemoryCenterEntry[]>([]);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setEntries([]); setFailed(false);
+    if (!character || !window.ailover) return;
+    void window.ailover.memory.list().then(setEntries).catch(() => setFailed(true));
+  }, [character?.id]);
+  return <><header className="conversation-header"><div><span className="eyebrow">长期记忆</span>
+    <h2>{character ? `${character.name}记住的事` : '尚未相遇'}</h2></div></header>
+    <div className="memory-page">{!character ? <div className="relationship-empty"><Brain size={28} /><p>创建角色后，这里会整理重要记忆。</p></div>
+      : failed ? <div className="relationship-empty"><p>暂时无法读取记忆。</p></div>
+        : entries.length === 0 ? <div className="relationship-empty"><p>目前还没有形成长期记忆。</p></div>
+          : <div className="memory-list">{entries.map((entry) => <article className="memory-entry" key={entry.id}>
+            <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)}</span></div>
+            <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
+          </article>)}</div>}</div></>;
+}
+
+function memoryTypeLabel(type: MemoryCenterEntry['type']): string {
+  return ({ semantic: '事实', preference: '偏好', plan: '计划', episodic: '经历', relationship: '关系' })[type];
 }
 
 function CharacterView({ character, visual, onVisualChange, onCreate }: {

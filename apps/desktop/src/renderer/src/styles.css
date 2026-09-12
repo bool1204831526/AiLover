@@ -1085,6 +1085,14 @@ button:disabled {
   overflow-y: auto;
 }
 
+.memory-page { overflow: auto; padding: 24px 28px 40px; }
+.memory-list { display: grid; gap: 12px; max-width: 760px; }
+.memory-entry { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; background: var(--surface); }
+.memory-entry-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.memory-entry-head span { color: var(--muted); font-size: 12px; }
+.memory-entry p { margin: 9px 0; line-height: 1.6; }
+.memory-entry small { color: var(--muted); }
+
 .character-page {
   min-height: 0;
   padding: 26px 28px;
