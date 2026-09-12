@@ -1092,6 +1092,8 @@ button:disabled {
 .memory-entry-head span { color: var(--muted); font-size: 12px; }
 .memory-entry p { margin: 9px 0; line-height: 1.6; }
 .memory-entry small { color: var(--muted); }
+.memory-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
+.memory-entry-actions button { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 3px 0; }
 
 .character-page {
   min-height: 0;

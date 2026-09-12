@@ -483,6 +483,16 @@ export class SqliteMemoryRepository implements MemoryRepository {
       .run(strength, state, id);
   }
 
+  public async correct(id: string, content: string, importance: number, at: Date): Promise<void> {
+    this.database.sqlite.prepare(`UPDATE memories SET content = ?, evidence = ?, importance = ?, last_seen_at = ? WHERE id = ?`)
+      .run(content, content, Math.max(0, Math.min(1, importance)), at.toISOString(), id);
+  }
+
+  public async softDelete(id: string): Promise<void> {
+    this.database.sqlite.prepare("UPDATE memories SET state = 'expired', recall_strength = 0 WHERE id = ?")
+      .run(id);
+  }
+
   private insertSource(memoryId: string, messageId: string, evidence: string, at: Date): boolean {
     const result = this.database.sqlite.prepare(`INSERT OR IGNORE INTO memory_sources(
       memory_id, message_id, evidence, created_at) VALUES (?, ?, ?, ?)`)

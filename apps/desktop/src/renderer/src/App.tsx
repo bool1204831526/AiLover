@@ -154,6 +154,17 @@ function MemoryView({ character }: { character: CharacterSnapshot | null }): Rea
     if (!character || !window.ailover) return;
     void window.ailover.memory.list().then(setEntries).catch(() => setFailed(true));
   }, [character?.id]);
+  async function edit(entry: MemoryCenterEntry): Promise<void> {
+    if (!window.ailover) return;
+    const content = window.prompt('修改这条记忆', entry.content);
+    if (!content?.trim()) return;
+    await window.ailover.memory.correct({ id: entry.id, content: content.trim(), importance: entry.importance });
+    setEntries(await window.ailover.memory.list());
+  }
+  async function remove(entry: MemoryCenterEntry): Promise<void> {
+    if (!window.ailover || !window.confirm('删除后将不再参与记忆召回，是否继续？')) return;
+    await window.ailover.memory.delete(entry.id); setEntries(await window.ailover.memory.list());
+  }
   return <><header className="conversation-header"><div><span className="eyebrow">长期记忆</span>
     <h2>{character ? `${character.name}记住的事` : '尚未相遇'}</h2></div></header>
     <div className="memory-page">{!character ? <div className="relationship-empty"><Brain size={28} /><p>创建角色后，这里会整理重要记忆。</p></div>
@@ -162,6 +173,7 @@ function MemoryView({ character }: { character: CharacterSnapshot | null }): Rea
           : <div className="memory-list">{entries.map((entry) => <article className="memory-entry" key={entry.id}>
             <div className="memory-entry-head"><strong>{entry.subject}</strong><span>{memoryTypeLabel(entry.type)}</span></div>
             <p>{entry.content}</p><small>可信度 {Math.round(entry.confidence * 100)}% · 重要性 {Math.round(entry.importance * 100)}% · 更新于 {new Date(entry.lastSeenAt).toLocaleDateString('zh-CN')}</small>
+            <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>
           </article>)}</div>}</div></>;
 }
 

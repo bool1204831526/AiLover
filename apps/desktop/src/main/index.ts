@@ -472,6 +472,15 @@ function registerIpcHandlers(): void {
       firstSeenAt: memory.firstSeenAt.toISOString(), lastSeenAt: memory.lastSeenAt.toISOString(),
       expiresAt: memory.expiresAt?.toISOString() ?? null }));
   });
+  ipcMain.handle(IPC_CHANNELS.memoryCorrect, async (_event, input: unknown) => {
+    const value = input as { id?: unknown; content?: unknown; importance?: unknown };
+    if (typeof value.id !== 'string' || typeof value.content !== 'string' || typeof value.importance !== 'number') throw new Error('无效的记忆修改');
+    await memoryRepository.correct(value.id, value.content, value.importance, new Date());
+  });
+  ipcMain.handle(IPC_CHANNELS.memoryDelete, async (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('无效的记忆标识');
+    await memoryRepository.softDelete(id);
+  });
 
   ipcMain.handle(IPC_CHANNELS.characterCreate, async (_event, input: unknown) => {
     const draft = CharacterDraftSchema.parse(input);

@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   chatStream: 'chat:stream',
   relationshipGetSummary: 'relationship:get-summary',
   memoryList: 'memory:list',
+  memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete',
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
@@ -308,6 +309,8 @@ export const MemoryCenterEntrySchema = z.object({
 });
 export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);
 export type MemoryCenterEntry = z.infer<typeof MemoryCenterEntrySchema>;
+export const MemoryCorrectionSchema = z.object({ id: z.string().min(1), content: z.string().trim().min(1).max(2000), importance: z.number().min(0).max(1) });
+export type MemoryCorrection = z.infer<typeof MemoryCorrectionSchema>;
 
 export interface AiLoverDesktopApi {
   bootstrap(): Promise<BootstrapResponse>;
@@ -333,7 +336,7 @@ export interface AiLoverDesktopApi {
   relationship: {
     getSummary(): Promise<RelationshipSummary | null>;
   };
-  memory: { list(): Promise<MemoryCenterEntry[]> };
+  memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>; delete(id: string): Promise<void> };
   visuals: {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;
