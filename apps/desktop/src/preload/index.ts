@@ -20,6 +20,7 @@ import {
   DeleteAllDataInputSchema,
   CompanionSettingsSchema,
   DesktopPetPackSchema,
+  DesktopPetRuntimeStateSchema,
   type AiLoverDesktopApi,
 } from '@ailover/contracts';
 
@@ -139,6 +140,17 @@ const api: AiLoverDesktopApi = {
       const input = CompanionSettingsSchema.parse(request);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.companionSettingsSave, input);
       return CompanionSettingsSchema.parse(result);
+    },
+    getPetState: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.desktopPetStateGet);
+      return DesktopPetRuntimeStateSchema.parse(result);
+    },
+    onPetState: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+        listener(DesktopPetRuntimeStateSchema.parse(value));
+      };
+      ipcRenderer.on(IPC_CHANNELS.desktopPetStateChanged, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.desktopPetStateChanged, handler);
     },
     focusMain: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionFocusMain); },
     closeDesktopPet: async () => { await ipcRenderer.invoke(IPC_CHANNELS.companionClosePet); },

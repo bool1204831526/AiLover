@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
+  DesktopPetRuntimeStateSchema,
 } from './index';
 
 describe('shared contracts', () => {
@@ -67,5 +68,10 @@ describe('shared contracts', () => {
       spriteVersionNumber: 1, spritesheetPath: 'spritesheet.webp' }).spriteVersionNumber).toBe(1);
     expect(() => DesktopPetPackSchema.parse({ version: 1, mode: 'codex-v2', availableActions: [],
       missingRecommended: [], actionDataUrls: {}, message: 'ready' })).toThrow();
+  });
+
+  it('limits desktop pet runtime states to supported animation rows', () => {
+    expect(DesktopPetRuntimeStateSchema.parse('running-left')).toBe('running-left');
+    expect(() => DesktopPetRuntimeStateSchema.parse('sleeping')).toThrow();
   });
 });

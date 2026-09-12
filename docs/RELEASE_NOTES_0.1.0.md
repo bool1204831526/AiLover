@@ -12,6 +12,10 @@
 - Versioned local portrait imports and independent image-capability detection.
 - Validated backup and restore with checksums, rollback and credential exclusion.
 - Privacy-safe diagnostics and explicit permanent local-data deletion.
+- Configurable proactive companion notifications with quiet hours and tray-based background lifetime.
+- A draggable transparent desktop pet with separate-action WebP/PNG packs and Codex v1/v2 atlas support.
+- Event-driven pet reactions for model waiting, generation, completion, failure, positive interactions,
+  proactive notifications and left/right window dragging.
 
 ## Privacy
 

@@ -2,7 +2,8 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MessageCircle, X } from 'lucide-react';
 
-import type { CharacterSnapshot, CharacterVisualProfile, DesktopPetPack, DesktopPetPackManifest } from '@ailover/contracts';
+import type { CharacterSnapshot, CharacterVisualProfile, DesktopPetPack,
+  DesktopPetRuntimeState } from '@ailover/contracts';
 import { codexPetFrame, codexPetLookFrame, type CodexPetAnimation,
   type CodexPetFrame } from '@ailover/application';
 
@@ -16,9 +17,8 @@ if (!root) throw new Error('Renderer root element is missing');
 function DesktopPet(): React.JSX.Element {
   const [character, setCharacter] = useState<CharacterSnapshot | null>(null);
   const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
-  const [action, setAction] = useState<keyof DesktopPetPackManifest['actions']>('idle');
+  const [petState, setPetState] = useState<DesktopPetRuntimeState>('idle');
   const [petPack, setPetPack] = useState<DesktopPetPack | null>(null);
-  const [codexAnimation, setCodexAnimation] = useState<CodexPetAnimation>('idle');
   const [codexFrameIndex, setCodexFrameIndex] = useState(0);
   const [lookFrame, setLookFrame] = useState<CodexPetFrame | null>(null);
   useEffect(() => {
@@ -27,33 +27,28 @@ function DesktopPet(): React.JSX.Element {
     void api.bootstrap().then((result) => setCharacter(result.currentCharacter));
     void api.visuals.get().then(setVisual);
     void api.visuals.getDesktopPetPack().then(setPetPack);
-    const actions = ['idle', 'walk-left', 'walk-right', 'greet', 'happy', 'thinking', 'sleep'] as const;
-    const timer = window.setInterval(() => {
-      setAction(actions[Math.floor(Math.random() * actions.length)] ?? 'idle');
-    }, 6_000);
-    return () => window.clearInterval(timer);
+    void api.companion.getPetState().then(setPetState);
+    return api.companion.onPetState(setPetState);
   }, []);
   useEffect(() => {
     if (petPack?.mode === 'actions' || !petPack) return;
-    const sequence: CodexPetAnimation[] = ['idle', 'waving', 'idle', 'jumping', 'waiting', 'running', 'review'];
-    let sequenceIndex = 0;
-    const timer = window.setInterval(() => {
-      sequenceIndex = (sequenceIndex + 1) % sequence.length;
-      setCodexAnimation(sequence[sequenceIndex] ?? 'idle');
-      setCodexFrameIndex(0);
-    }, 5_500);
-    return () => window.clearInterval(timer);
-  }, [petPack]);
-  useEffect(() => {
-    if (petPack?.mode === 'actions' || !petPack) return;
-    const frame = codexPetFrame(codexAnimation, codexFrameIndex);
+    const frame = codexPetFrame(petState as CodexPetAnimation, codexFrameIndex);
     const timer = window.setTimeout(() => setCodexFrameIndex((index) => index + 1), frame.duration);
     return () => window.clearTimeout(timer);
-  }, [codexAnimation, codexFrameIndex, petPack?.mode]);
+  }, [petState, codexFrameIndex, petPack?.mode]);
+  useEffect(() => {
+    setCodexFrameIndex(0);
+    if (petState !== 'idle') setLookFrame(null);
+  }, [petState]);
+  const legacyActions: Record<DesktopPetRuntimeState, keyof DesktopPetPack['actionDataUrls']> = {
+    idle: 'idle', 'running-left': 'walk-left', 'running-right': 'walk-right', waving: 'greet',
+    jumping: 'happy', failed: 'thinking', waiting: 'thinking', running: 'thinking', review: 'happy',
+  };
+  const action = legacyActions[petState];
   const actionImage = petPack?.actionDataUrls[action] ?? petPack?.actionDataUrls.idle;
-  const atlasFrame = lookFrame ?? codexPetFrame(codexAnimation, codexFrameIndex);
+  const atlasFrame = lookFrame ?? codexPetFrame(petState as CodexPetAnimation, codexFrameIndex);
   return <main className="desktop-pet-shell" onPointerMove={(event) => {
-    if (petPack?.mode !== 'codex-v2') return;
+    if (petPack?.mode !== 'codex-v2' || petState !== 'idle') return;
     const bounds = event.currentTarget.getBoundingClientRect();
     setLookFrame(codexPetLookFrame(event.clientX - bounds.width / 2, event.clientY - bounds.height / 2, 34));
   }} onPointerLeave={() => setLookFrame(null)}>

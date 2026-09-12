@@ -18,6 +18,8 @@ export const IPC_CHANNELS = {
   imageCapabilitiesGet: 'image-capabilities:get',
   desktopPetPackGet: 'desktop-pet-pack:get',
   desktopPetPackImport: 'desktop-pet-pack:import',
+  desktopPetStateGet: 'desktop-pet-state:get',
+  desktopPetStateChanged: 'desktop-pet-state:changed',
   dataExportBackup: 'data:export-backup',
   dataRestoreBackup: 'data:restore-backup',
   dataExportDiagnostics: 'data:export-diagnostics',
@@ -206,6 +208,11 @@ export const DesktopPetPackSchema = z.object({
 });
 export type DesktopPetPack = z.infer<typeof DesktopPetPackSchema>;
 
+export const DesktopPetRuntimeStateSchema = z.enum([
+  'idle', 'running-right', 'running-left', 'waving', 'jumping', 'failed', 'waiting', 'running', 'review',
+]);
+export type DesktopPetRuntimeState = z.infer<typeof DesktopPetRuntimeStateSchema>;
+
 export const DataOperationResultSchema = z.object({
   ok: z.literal(true),
   message: z.string().min(1),
@@ -319,6 +326,8 @@ export interface AiLoverDesktopApi {
   companion: {
     getSettings(): Promise<CompanionSettings>;
     saveSettings(input: CompanionSettings): Promise<CompanionSettings>;
+    getPetState(): Promise<DesktopPetRuntimeState>;
+    onPetState(listener: (state: DesktopPetRuntimeState) => void): () => void;
     focusMain(): Promise<void>;
     closeDesktopPet(): Promise<void>;
   };

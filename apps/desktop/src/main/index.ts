@@ -13,8 +13,9 @@ import {
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
+  DesktopPetRuntimeStateSchema,
   type CodexPetManifest, type DesktopPetPackManifest,
-  type ChatStreamEvent,
+  type ChatStreamEvent, type DesktopPetRuntimeState,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
@@ -76,6 +77,9 @@ const activeChats = new Map<string, AbortController>();
 let mainWindow: BrowserWindow | null = null;
 let desktopPetWindow: BrowserWindow | null = null;
 let companionTimer: NodeJS.Timeout | null = null;
+let desktopPetReactionTimer: NodeJS.Timeout | null = null;
+let desktopPetMoveTimer: NodeJS.Timeout | null = null;
+let desktopPetActivityState: DesktopPetRuntimeState = 'idle';
 let tray: Tray | null = null;
 let isQuitting = false;
 
@@ -107,6 +111,29 @@ function toChatMessage(message: StoredChatMessage) {
 function emitChatEvent(event: ChatStreamEvent): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.chatStream, ChatStreamEventSchema.parse(event));
+  }
+}
+
+function emitDesktopPetState(state: DesktopPetRuntimeState): void {
+  if (desktopPetWindow && !desktopPetWindow.isDestroyed()) {
+    desktopPetWindow.webContents.send(
+      IPC_CHANNELS.desktopPetStateChanged,
+      DesktopPetRuntimeStateSchema.parse(state),
+    );
+  }
+}
+
+function setDesktopPetActivity(state: DesktopPetRuntimeState, resetAfterMs?: number): void {
+  if (desktopPetReactionTimer) clearTimeout(desktopPetReactionTimer);
+  desktopPetActivityState = state;
+  emitDesktopPetState(state);
+  if (resetAfterMs) {
+    desktopPetReactionTimer = setTimeout(() => {
+      desktopPetReactionTimer = null;
+      desktopPetActivityState = 'idle';
+      emitDesktopPetState('idle');
+    }, resetAfterMs);
+    desktopPetReactionTimer.unref();
   }
 }
 
@@ -421,6 +448,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.companionFocusMain, async () => focusMainWindow());
+  ipcMain.handle(IPC_CHANNELS.desktopPetStateGet, async () => desktopPetActivityState);
   ipcMain.handle(IPC_CHANNELS.companionClosePet, async () => {
     const stored = companionSettingsRepository.get();
     companionSettingsRepository.save({ ...stored, desktopPetEnabled: false });
@@ -451,6 +479,7 @@ function registerIpcHandlers(): void {
     const requestId = randomUUID();
     const controller = new AbortController();
     activeChats.set(requestId, controller);
+    setDesktopPetActivity('waiting');
     setImmediate(() => void completeChat(
       requestId, character, userMessage, assistantMessage, controller.signal,
     ));
@@ -679,6 +708,7 @@ async function completeChat(
   signal: AbortSignal,
 ): Promise<void> {
   let content = '';
+  let completionReaction: DesktopPetRuntimeState = 'review';
   try {
     const history = await conversationRepository.listMessages(assistantMessage.conversationId);
     let recalled: RecalledMemory[] = [];
@@ -691,7 +721,9 @@ async function completeChat(
     const cognition = await cognitionService.processInteraction({ characterId: character.id,
       baseline: character.personalityBaseline, sourceMessageId: userMessage.id,
       text: userMessage.content, now: userMessage.createdAt });
-    const responsePlan = createResponsePlan(cognition, analyzeInteraction(userMessage.content));
+    const interaction = analyzeInteraction(userMessage.content);
+    const responsePlan = createResponsePlan(cognition, interaction);
+    if (interaction.reasons.includes('received positive affection')) completionReaction = 'jumping';
     const cognitionContext = `${projectCognition(cognition)}；回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`;
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
@@ -701,6 +733,7 @@ async function completeChat(
         character, history, 12_000, recalled, cognitionContext,
       ), signal,
       ...(apiKey ? { apiKey } : {}) })) {
+      if (!content) setDesktopPetActivity('running');
       content += delta;
       emitChatEvent({ type: 'chunk', requestId, messageId: assistantMessage.id, delta });
     }
@@ -709,15 +742,21 @@ async function completeChat(
       { content, status: 'completed', model: profile.model });
     const completed = { ...assistantMessage, content, status: 'completed' as const, model: profile.model };
     emitChatEvent({ type: 'completed', requestId, message: toChatMessage(completed) });
+    setDesktopPetActivity(completionReaction, 3_000);
   } catch (error) {
     const cancelled = signal.aborted;
     const status = cancelled ? 'cancelled' as const : 'failed' as const;
     await conversationRepository.updateMessage(assistantMessage.id, { content, status });
     const message = toChatMessage({ ...assistantMessage, content, status });
-    if (cancelled) emitChatEvent({ type: 'cancelled', requestId, message });
-    else emitChatEvent({ type: 'failed', requestId, message,
-      error: error instanceof ModelGatewayError ? error.message : '生成回复失败，请稍后重试。',
-      retryable: error instanceof ModelGatewayError ? error.retryable : true });
+    if (cancelled) {
+      emitChatEvent({ type: 'cancelled', requestId, message });
+      setDesktopPetActivity('idle');
+    } else {
+      emitChatEvent({ type: 'failed', requestId, message,
+        error: error instanceof ModelGatewayError ? error.message : '生成回复失败，请稍后重试。',
+        retryable: error instanceof ModelGatewayError ? error.retryable : true });
+      setDesktopPetActivity('failed', 4_000);
+    }
   } finally {
     try {
       await memoryService.capture({ userId: 'local-user', characterId: character.id,
@@ -792,8 +831,25 @@ function createDesktopPetWindow(): BrowserWindow {
       nodeIntegration: false, sandbox: true },
   });
   desktopPetWindow = window;
+  let previousX = window.getBounds().x;
+  window.on('move', () => {
+    const currentX = window.getBounds().x;
+    const delta = currentX - previousX;
+    previousX = currentX;
+    if (Math.abs(delta) >= 1) emitDesktopPetState(delta > 0 ? 'running-right' : 'running-left');
+    if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
+    desktopPetMoveTimer = setTimeout(() => {
+      desktopPetMoveTimer = null;
+      emitDesktopPetState(desktopPetActivityState);
+    }, 180);
+    desktopPetMoveTimer.unref();
+  });
   window.once('ready-to-show', () => window.showInactive());
-  window.once('closed', () => { if (desktopPetWindow === window) desktopPetWindow = null; });
+  window.once('closed', () => {
+    if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
+    desktopPetMoveTimer = null;
+    if (desktopPetWindow === window) desktopPetWindow = null;
+  });
   loadRendererWindow(window, true);
   return window;
 }
@@ -840,6 +896,7 @@ async function evaluateCompanionPrompt(): Promise<void> {
     focusMainWindow();
   });
   notification.show();
+  setDesktopPetActivity('waving', 3_000);
   companionSettingsRepository.recordPrompt(now);
 }
 
@@ -872,5 +929,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   if (companionTimer) clearInterval(companionTimer);
+  if (desktopPetReactionTimer) clearTimeout(desktopPetReactionTimer);
+  if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
   database.close();
 });
