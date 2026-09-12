@@ -20,6 +20,7 @@
 - Persistent pet position and size, multi-display visibility recovery and an inactivity sleep state.
 - Synchronized compact desktop-pet chat with streamed reply bubbles and cross-window message updates.
 - Hover and keyboard interaction feedback for the desktop pet without interrupting active chat states.
+- A larger multi-line desktop-pet speech bubble with scrolling for longer replies.
 
 ## Privacy
 
