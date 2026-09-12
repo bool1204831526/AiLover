@@ -25,7 +25,9 @@ export function applyEmotionalAssociations(
   let arousalDelta = 0;
   let securityDelta = 0;
   let affectionDelta = 0;
-  for (const association of associations.slice(0, 3)) {
+  const ranked = [...associations].sort((left, right) =>
+    (right.relevance * right.emotionalWeight) - (left.relevance * left.emotionalWeight));
+  for (const association of ranked.slice(0, 3)) {
     const weight = Math.max(0, Math.min(1, association.relevance)) *
       Math.max(0, Math.min(1, association.emotionalWeight));
     const text = association.userEmotion ?? '';

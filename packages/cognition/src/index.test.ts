@@ -55,6 +55,15 @@ it('includes recalled emotional associations in interaction state', async () => 
   expect(state.emotion.valence).toBeGreaterThan(0.55);
 });
 
+it('prioritizes the strongest associations instead of input order', () => {
+  const base = currentSnapshot().emotion;
+  const result = applyEmotionalAssociations(base, [
+    { relevance: 0.1, emotionalWeight: 1, userEmotion: '难过', relationshipRelevance: 0.9 },
+    { relevance: 1, emotionalWeight: 1, userEmotion: '积极', relationshipRelevance: 0.9 },
+  ]);
+  expect(result.valence).toBeGreaterThan(base.valence);
+});
+
 class MemoryCognitionRepository implements CognitionRepository {
   snapshot: CognitionSnapshot | null = null;
   evidence: EvolutionEvidence[] = [];
