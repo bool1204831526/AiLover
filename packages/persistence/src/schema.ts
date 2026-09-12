@@ -184,3 +184,10 @@ export const consolidatedMemories = sqliteTable('consolidated_memories', {
   importance: real('importance').notNull(), reinforcementCount: integer('reinforcement_count').notNull(),
   status: text('status').notNull(), createdAt: text('created_at').notNull(),
 });
+
+export const selfModelEntries = sqliteTable('self_model_entries', {
+  id: text('id').primaryKey(), characterId: text('character_id').notNull().references(() => characters.id),
+  category: text('category').notNull(), statement: text('statement').notNull(), confidence: real('confidence').notNull(),
+  version: integer('version').notNull(), sourceMessageId: text('source_message_id').references(() => messages.id),
+  reason: text('reason').notNull(), status: text('status').notNull(), createdAt: text('created_at').notNull(),
+});

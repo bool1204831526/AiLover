@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 const migrations = [{
   version: 1,
@@ -362,6 +362,25 @@ const migrations = [{
       episode_id TEXT NOT NULL REFERENCES episodic_memories(id) ON DELETE CASCADE,
       PRIMARY KEY(consolidated_memory_id, episode_id)
     );
+  `,
+}, {
+  version: 14,
+  sql: `
+    CREATE TABLE IF NOT EXISTS self_model_entries (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      category TEXT NOT NULL CHECK(category IN ('fact', 'belief', 'value', 'change')),
+      statement TEXT NOT NULL,
+      confidence REAL NOT NULL CHECK(confidence BETWEEN 0 AND 1),
+      version INTEGER NOT NULL CHECK(version > 0),
+      source_message_id TEXT REFERENCES messages(id),
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('active', 'superseded')),
+      created_at TEXT NOT NULL,
+      UNIQUE(character_id, category, statement)
+    );
+    CREATE INDEX IF NOT EXISTS self_model_entries_active
+      ON self_model_entries(character_id, status, version DESC);
   `,
 }] as const;
 

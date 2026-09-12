@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
-import { CognitionService } from '@ailover/cognition';
+import { CognitionService, type SelfModelEntry } from '@ailover/cognition';
 import { EpisodicMemoryService, MemoryService, type ConsolidatedMemory, type FutureIntention } from '@ailover/memory';
 
 import {
@@ -15,6 +15,7 @@ import {
   SqliteEpisodicMemoryRepository,
   SqliteFutureIntentionRepository,
   SqliteConsolidatedMemoryRepository,
+  SqliteSelfModelRepository,
   SqliteCompanionSettingsRepository,
   SqliteDesktopPetWindowStateRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
@@ -74,7 +75,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(13);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(14);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -367,6 +368,24 @@ describe('SqliteCognitionRepository', () => {
     expect((await repository.listActive('character-consolidated'))[0]).toMatchObject({
       id: 'insight-1', statement: insight.statement, reinforcementCount: 2,
     });
+    database.close();
+  });
+
+  it('versions new self model entries and ignores exact duplicates', async () => {
+    const path = join(tmpdir(), `ailover-self-model-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const database = openAppDatabase(path);
+    database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
+      speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('character-self', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
+    const repository = new SqliteSelfModelRepository(database);
+    const entry: Omit<SelfModelEntry, 'version'> = { id: 'self-1', characterId: 'character-self',
+      category: 'value', statement: '陪伴和情绪安全对我很重要。', confidence: 0.85,
+      sourceMessageId: null, reason: 'personality projection', status: 'active', createdAt: new Date('2026-09-12') };
+    expect((await repository.saveIfNew(entry))?.version).toBe(1);
+    expect(await repository.saveIfNew({ ...entry, id: 'self-duplicate' })).toBeNull();
+    expect((await repository.saveIfNew({ ...entry, id: 'self-2', category: 'belief', statement: '发生冲突时先修复信任。' }))?.version).toBe(2);
+    expect((await repository.listActive('character-self')).map(({ version }) => version)).toEqual([2, 1]);
     database.close();
   });
 });

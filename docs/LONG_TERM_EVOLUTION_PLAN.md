@@ -17,7 +17,7 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 2. Episodic Memory: completed; detect, persist and recall significant shared experiences.
 3. Semantic Extraction: in progress; deterministic implicit-preference candidates now use lower confidence, with validated structured model candidates still planned.
 4. Memory Consolidation: completed; repeated compatible episodes automatically form, persist, reinforce and cautiously guide later replies.
-5. Self Model: in progress; bounded local facts, beliefs, values and change projections now guide replies.
+5. Self Model: completed; categorized, evidence-linked and versioned self knowledge persists across restarts and guides replies.
 6. Personality Evidence: completed; evidence can be grouped and inspected with recent source explanations.
 7. Relationship Timeline: in progress; important Episode milestones now have a chronological projection.
 8. Emotional Association: completed; relevant past experiences now provide a small bounded emotional echo.

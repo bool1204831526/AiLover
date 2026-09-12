@@ -75,3 +75,8 @@
 - Added schema 13 storage for long-term insights and their source Episode links.
 - Repeated equivalent insights reinforce existing records instead of creating duplicates.
 - Integrated automatic post-Episode consolidation and bounded insight recall into the chat lifecycle.
+
+# Persistent self model
+
+- Added schema 14 storage for categorized facts, beliefs, values and changes with source messages and versions.
+- Chat now saves new self knowledge and restores the four most recent active entries across restarts.

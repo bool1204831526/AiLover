@@ -291,10 +291,48 @@ export type SelfModelProjection = {
   changes: string[];
 };
 
+export type SelfModelEntry = {
+  id: string;
+  characterId: string;
+  category: 'fact' | 'belief' | 'value' | 'change';
+  statement: string;
+  confidence: number;
+  version: number;
+  sourceMessageId: string | null;
+  reason: string;
+  status: 'active' | 'superseded';
+  createdAt: Date;
+};
+
 export function projectSelfModel(
   snapshot: CognitionSnapshot,
   signal: InteractionSignal,
 ): string[] {
+  const projection = buildSelfModelProjection(snapshot, signal);
+  return [...projection.facts, ...projection.beliefs, ...projection.values, ...projection.changes].slice(0, 4);
+}
+
+export function createSelfModelEntries(
+  snapshot: CognitionSnapshot,
+  signal: InteractionSignal,
+  input: { idGenerator: { next(): string }; sourceMessageId: string; now: Date },
+): Omit<SelfModelEntry, 'version'>[] {
+  const projection = buildSelfModelProjection(snapshot, signal);
+  const groups = [
+    ['fact', projection.facts], ['belief', projection.beliefs],
+    ['value', projection.values], ['change', projection.changes],
+  ] as const;
+  return groups.flatMap(([category, statements]) => statements.map((statement) => ({
+    id: input.idGenerator.next(), characterId: snapshot.characterId, category, statement,
+    confidence: category === 'change' ? 0.75 : 0.85, sourceMessageId: input.sourceMessageId,
+    reason: snapshot.reason, status: 'active' as const, createdAt: input.now,
+  })));
+}
+
+function buildSelfModelProjection(
+  snapshot: CognitionSnapshot,
+  signal: InteractionSignal,
+): SelfModelProjection {
   const projection: SelfModelProjection = { facts: [], beliefs: [], values: [], changes: [] };
   if (snapshot.personality.initiative >= 0.65) projection.facts.push('我通常愿意主动关心用户的近况。');
   if (snapshot.personality.reserve >= 0.65) projection.facts.push('我在表达和承诺上比较谨慎。');
@@ -310,7 +348,7 @@ export function projectSelfModel(
   if (snapshot.personality.initiative > 0.5 && snapshot.personality.initiative > 0.65) {
     projection.changes.push('我比最初更愿意在合适的时机主动表达关心。');
   }
-  return [...projection.facts, ...projection.beliefs, ...projection.values, ...projection.changes].slice(0, 4);
+  return projection;
 }
 
 export function projectPersonality(

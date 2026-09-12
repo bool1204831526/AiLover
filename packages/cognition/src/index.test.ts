@@ -4,7 +4,7 @@ import type { PersonalityValues } from '@ailover/domain';
 
 import {
   analyzeInteraction, applyEmotionalAssociations, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
-  createResponsePlan, projectPersonality, projectSelfModel, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
+  createResponsePlan, createSelfModelEntries, projectPersonality, projectSelfModel, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
   summarizePersonalityEvidence, type ReflectionRecord,
 } from './index';
 
@@ -62,6 +62,16 @@ it('prioritizes the strongest associations instead of input order', () => {
     { relevance: 1, emotionalWeight: 1, userEmotion: '积极', relationshipRelevance: 0.9 },
   ]);
   expect(result.valence).toBeGreaterThan(base.valence);
+});
+
+it('creates categorized and evidence-linked self model entries', () => {
+  let id = 0;
+  const entries = createSelfModelEntries(currentSnapshot({ ...baseline, warmth: 0.8 }),
+    analyzeInteraction('其实我很难过，只告诉你一个秘密'),
+    { idGenerator: { next: () => `self-${++id}` }, sourceMessageId: 'message-self', now: new Date('2026-09-12') });
+  expect(entries.some(({ category }) => category === 'belief')).toBe(true);
+  expect(entries.some(({ category }) => category === 'value')).toBe(true);
+  expect(entries.every(({ sourceMessageId }) => sourceMessageId === 'message-self')).toBe(true);
 });
 
 class MemoryCognitionRepository implements CognitionRepository {

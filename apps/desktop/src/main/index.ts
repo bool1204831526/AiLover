@@ -19,7 +19,7 @@ import {
   type ChatStreamEvent, type DesktopPetRuntimeState,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
-import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
+import { analyzeInteraction, CognitionService, createResponsePlan, createSelfModelEntries, projectCognition,
   relationshipSummary } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendCompanionPrompt,
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
@@ -37,6 +37,7 @@ import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabas
   SqliteEpisodicMemoryRepository,
   SqliteConsolidatedMemoryRepository,
   SqliteFutureIntentionRepository,
+  SqliteSelfModelRepository,
   SqliteDesktopPetWindowStateRepository,
   validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
@@ -83,6 +84,7 @@ const episodicMemoryService = new EpisodicMemoryService({
   repository: episodicMemoryRepository, idGenerator: { next: randomUUID },
 });
 const consolidatedMemoryRepository = new SqliteConsolidatedMemoryRepository(database);
+const selfModelRepository = new SqliteSelfModelRepository(database);
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
@@ -888,11 +890,25 @@ async function completeChat(
         relationshipRelevance: episode.relationshipRelevance })) });
     const interaction = analyzeInteraction(userMessage.content);
     const responsePlan = createResponsePlan(cognition, interaction);
+    try {
+      const entries = createSelfModelEntries(cognition, interaction,
+        { idGenerator: { next: randomUUID }, sourceMessageId: userMessage.id, now: userMessage.createdAt });
+      for (const entry of entries) await selfModelRepository.saveIfNew(entry);
+    } catch (error) {
+      logger.warn({ error }, 'Self model persistence failed');
+    }
+    let persistedSelfModel = responsePlan.selfProjection;
+    try {
+      const entries = await selfModelRepository.listActive(character.id, 4);
+      if (entries.length) persistedSelfModel = entries.map(({ statement }) => statement);
+    } catch (error) {
+      logger.warn({ error }, 'Self model recall failed; using current projection');
+    }
     if (interaction.reasons.includes('received positive affection')) completionReaction = 'jumping';
     const personalityContext = responsePlan.personalityProjection.length
       ? `当前人格表达倾向：\n- ${responsePlan.personalityProjection.join('\n- ')}` : '';
-    const selfContext = responsePlan.selfProjection.length
-      ? `当前自我认识：\n- ${responsePlan.selfProjection.join('\n- ')}` : '';
+    const selfContext = persistedSelfModel.length
+      ? `当前自我认识：\n- ${persistedSelfModel.join('\n- ')}` : '';
     const intentionContext = triggeredIntentions.length
       ? `可以自然关心但不要假设结果：\n- ${triggeredIntentions.map(({ description }) => description).join('\n- ')}` : '';
     const insightContext = consolidatedMemories.length

@@ -11,7 +11,7 @@ import type {
 } from '@ailover/application';
 import { MAX_RETAINED_CHAT_MESSAGES } from '@ailover/application';
 import type {
-  CognitionRepository, CognitionSnapshot, EvolutionEvidence, ReflectionRecord,
+  CognitionRepository, CognitionSnapshot, EvolutionEvidence, ReflectionRecord, SelfModelEntry,
 } from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { EpisodeSource, EpisodicMemoryRepository, MemoryRepository, MemoryType,
@@ -581,6 +581,40 @@ export class SqliteConsolidatedMemoryRepository {
   }
 }
 
+export class SqliteSelfModelRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async saveIfNew(entry: Omit<SelfModelEntry, 'version'>): Promise<SelfModelEntry | null> {
+    const existing = this.database.sqlite.prepare(`SELECT id FROM self_model_entries
+      WHERE character_id = ? AND category = ? AND statement = ? LIMIT 1`)
+      .get(entry.characterId, entry.category, entry.statement) as { id: string } | undefined;
+    if (existing) return null;
+    const row = this.database.sqlite.prepare(`SELECT COALESCE(MAX(version), 0) AS version
+      FROM self_model_entries WHERE character_id = ?`).get(entry.characterId) as { version: number };
+    const stored = { ...entry, version: row.version + 1 };
+    this.database.sqlite.prepare(`INSERT INTO self_model_entries(id, character_id, category, statement,
+      confidence, version, source_message_id, reason, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(stored.id, stored.characterId, stored.category,
+        stored.statement, stored.confidence, stored.version, stored.sourceMessageId, stored.reason,
+        stored.status, stored.createdAt.toISOString());
+    return stored;
+  }
+
+  public async listActive(characterId: string, limit = 20): Promise<SelfModelEntry[]> {
+    const rows = this.database.sqlite.prepare(`SELECT * FROM self_model_entries
+      WHERE character_id = ? AND status = 'active' ORDER BY version DESC LIMIT ?`)
+      .all(characterId, limit) as SelfModelRow[];
+    return rows.map((row) => ({ id: row.id, characterId: row.character_id,
+      category: row.category as SelfModelEntry['category'], statement: row.statement,
+      confidence: row.confidence, version: row.version, sourceMessageId: row.source_message_id,
+      reason: row.reason, status: row.status as SelfModelEntry['status'], createdAt: new Date(row.created_at) }));
+  }
+}
+
+type SelfModelRow = { id: string; character_id: string; category: string; statement: string;
+  confidence: number; version: number; source_message_id: string | null; reason: string;
+  status: string; created_at: string };
+
 type ConsolidatedMemoryRow = { id: string; type: string; statement: string; confidence: number;
   importance: number; reinforcement_count: number; status: string; created_at: string };
 
@@ -810,5 +844,5 @@ function parseStringArray(value: string): string[] {
 
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories, episodicMemories,
-  consolidatedMemories, desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
+  consolidatedMemories, desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections, selfModelEntries,
   relationshipStates, users } from './schema';
