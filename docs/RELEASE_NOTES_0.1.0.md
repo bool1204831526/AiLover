@@ -6,6 +6,7 @@
 - One persistent companion character with structured identity, personality baseline and speaking style.
 - OpenAI-compatible and Ollama chat providers with encrypted local credential storage.
 - Streaming chat, cancellation, timeout handling, retryable failures and restart recovery.
+- Searchable long-term chat history with surrounding context and return-to-latest navigation.
 - Evidence-backed memory for preferences, plans and important interactions.
 - Bounded emotion, relationship and personality evolution with traceable source messages.
 - Natural-language relationship summary without exposing internal scores.
@@ -33,8 +34,8 @@
 ## Known Limitations
 
 - The MVP supports one active character and one current conversation timeline.
-- Long conversations retain all records in SQLite and backups, while the current chat view loads the
-  latest 500 messages. Browsing or searching older messages is not yet available.
+- Long conversations retain all records in SQLite and backups. The live view loads the latest 500
+  messages, while search can open a focused window around older matching messages.
 - Image generation and automatic reference-image analysis are capability interfaces only; portrait
   import is the reliable default path.
 - There is no automatic updater or production code-signing certificate yet.

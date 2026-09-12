@@ -9,7 +9,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, s
 import {
   BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
-  ConversationSnapshotSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
+  ConversationSnapshotSchema, ConversationContextInputSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
@@ -510,6 +510,17 @@ function registerIpcHandlers(): void {
     const conversation = await conversationRepository.findCurrent(character.id);
     if (!conversation) return [];
     return (await conversationRepository.searchMessages(conversation.id, request.query, request.limit)).map(toChatMessage);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.conversationContext, async (_event, input: unknown) => {
+    const request = ConversationContextInputSchema.parse(input);
+    const character = await characterService.findCurrent();
+    if (!character) return ConversationHistorySchema.parse({ conversation: null, messages: [] });
+    const conversation = await conversationRepository.findCurrent(character.id);
+    if (!conversation) return ConversationHistorySchema.parse({ conversation: null, messages: [] });
+    const messages = await conversationRepository.listMessagesAround(conversation.id, request.messageId, 25);
+    return ConversationHistorySchema.parse({ conversation: toConversationSnapshot(conversation),
+      messages: messages.map(toChatMessage) });
   });
 
   ipcMain.handle(IPC_CHANNELS.companionSettingsGet, async () => {

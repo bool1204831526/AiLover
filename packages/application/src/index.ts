@@ -73,6 +73,7 @@ export interface ConversationRepository {
   create(conversation: StoredConversation): Promise<void>;
   listMessages(conversationId: string): Promise<StoredChatMessage[]>;
   searchMessages(conversationId: string, query: string, limit: number): Promise<StoredChatMessage[]>;
+  listMessagesAround(conversationId: string, messageId: string, radius: number): Promise<StoredChatMessage[]>;
   findMessage(id: string): Promise<StoredChatMessage | null>;
   saveMessage(message: StoredChatMessage): Promise<void>;
   updateMessage(id: string, patch: Pick<StoredChatMessage, 'content' | 'status'> &

@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
   modelProfileTest: 'model-profile:test',
   conversationLoad: 'conversation:load',
   conversationSearch: 'conversation:search',
+  conversationContext: 'conversation:context',
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
   chatStream: 'chat:stream',
@@ -96,6 +97,11 @@ export const ConversationSearchInputSchema = z.object({
   limit: z.number().int().min(1).max(100).default(50),
 });
 export type ConversationSearchInput = z.infer<typeof ConversationSearchInputSchema>;
+
+export const ConversationContextInputSchema = z.object({
+  messageId: z.string().min(1).max(100),
+});
+export type ConversationContextInput = z.infer<typeof ConversationContextInputSchema>;
 
 export const ChatSendInputSchema = z.object({
   text: z.string().trim().min(1).max(8000),
@@ -306,6 +312,7 @@ export interface AiLoverDesktopApi {
   conversation: {
     load(): Promise<ConversationHistory>;
     search(input: ConversationSearchInput): Promise<ChatMessage[]>;
+    loadContext(input: ConversationContextInput): Promise<ConversationHistory>;
   };
   chat: {
     send(input: ChatSendInput): Promise<ChatSendReceipt>;

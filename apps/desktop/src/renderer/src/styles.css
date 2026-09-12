@@ -432,9 +432,24 @@ button:disabled {
 .search-result { display: block; width: 100%; padding: 9px 10px; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
 .search-result:last-child { border-bottom: 0; }
 .search-result:hover { background: var(--surface-raised); }
+.search-result:disabled { cursor: default; opacity: 0.55; }
 .search-result span, .search-result strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-result span { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
 .search-result strong { font-size: 13px; font-weight: 500; }
+
+.history-context-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  color: #6d5b5e;
+  background: #f5eeee;
+  border: 1px solid #e5d5d7;
+  font-size: 12px;
+}
+.history-context-notice button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 5px 7px; color: #8c3f4a; background: transparent; border: 0; cursor: pointer; font-weight: 650; }
 
 .message-list {
   flex: 1 1 auto;
@@ -450,6 +465,11 @@ button:disabled {
 
 .message-row.user {
   justify-content: flex-end;
+}
+
+.message-row.history-target .message-bubble {
+  outline: 2px solid rgb(169 71 86 / 42%);
+  outline-offset: 3px;
 }
 
 .message-bubble {

@@ -8,6 +8,7 @@ import {
   ChatSendReceiptSchema,
   ChatStreamEventSchema,
   ConversationHistorySchema,
+  ConversationContextInputSchema,
   ConversationSearchInputSchema,
   IPC_CHANNELS,
   ModelConnectionResultSchema,
@@ -65,6 +66,11 @@ const api: AiLoverDesktopApi = {
       const input = ConversationSearchInputSchema.parse(request);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.conversationSearch, input);
       return ConversationHistorySchema.shape.messages.parse(result);
+    },
+    loadContext: async (request) => {
+      const input = ConversationContextInputSchema.parse(request);
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.conversationContext, input);
+      return ConversationHistorySchema.parse(result);
     },
   },
   chat: {

@@ -261,6 +261,24 @@ export class SqliteConversationRepository implements ConversationRepository {
     return rows.reverse().map((row) => this.toMessage(row));
   }
 
+  public async listMessagesAround(
+    conversationId: string,
+    messageId: string,
+    radius: number,
+  ): Promise<StoredChatMessage[]> {
+    const rows = this.database.sqlite.prepare(`WITH ordered AS (
+      SELECT *, ROW_NUMBER() OVER (ORDER BY created_at, id) AS row_number
+      FROM messages WHERE conversation_id = ?
+    ), target AS (
+      SELECT row_number FROM ordered WHERE id = ?
+    )
+    SELECT ordered.* FROM ordered, target
+    WHERE ordered.row_number BETWEEN target.row_number - ? AND target.row_number + ?
+    ORDER BY ordered.row_number`).all(conversationId, messageId, radius, radius) as
+      (typeof messages.$inferSelect)[];
+    return rows.map((row) => this.toMessage(row));
+  }
+
   public async findMessage(id: string): Promise<StoredChatMessage | null> {
     const row = this.database.orm.select().from(messages).where(eq(messages.id, id)).limit(1).get();
     return row ? this.toMessage(row) : null;

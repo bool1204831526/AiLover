@@ -179,6 +179,14 @@ describe('SqliteConversationRepository', () => {
       .toEqual(['你好', '很高兴见到你']);
     expect((await restored.searchMessages('conversation-1', '高兴', 10)).map(({ id }) => id))
       .toEqual(['message-2']);
+    for (let index = 3; index <= 5; index += 1) {
+      await restored.saveMessage({ id: `message-${index}`, conversationId: 'conversation-1',
+        role: index % 2 ? 'user' : 'assistant', content: `消息 ${index}`, status: 'completed',
+        model: index % 2 ? null : 'model-a', createdAt: new Date(`2026-09-11T01:00:0${index}Z`) });
+    }
+    expect((await restored.listMessagesAround('conversation-1', 'message-3', 1)).map(({ id }) => id))
+      .toEqual(['message-2', 'message-3', 'message-4']);
+    expect(await restored.listMessagesAround('conversation-1', 'missing-message', 2)).toEqual([]);
     second.close();
   });
 });

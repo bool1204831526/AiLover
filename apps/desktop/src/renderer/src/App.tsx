@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
-  Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
+  ArrowDown, Check, ChevronLeft, DatabaseBackup, Download, FileJson, Heart, Image, MessageCircle,
   RotateCcw, Search, SendHorizontal, Settings, ShieldCheck, SlidersHorizontal, Square, Trash2, Upload,
   UserRound, X,
 } from 'lucide-react';
@@ -282,11 +282,13 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
   const [chatError, setChatError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null);
+  const [historyTargetId, setHistoryTargetId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMessages([]);
     setChatError(null);
+    setHistoryTargetId(null);
     if (!character || !window.ailover) return;
     void window.ailover.conversation.load().then(({ messages: restored }) => setMessages(restored))
       .catch(() => setChatError('无法读取聊天记录。'));
@@ -300,17 +302,44 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     catch { setChatError('搜索聊天记录失败。'); }
   }
 
+  async function openSearchResult(messageId: string): Promise<void> {
+    if (!window.ailover || requestId) return;
+    setChatError(null);
+    try {
+      const history = await window.ailover.conversation.loadContext({ messageId });
+      if (!history.messages.length) throw new Error('Message context is unavailable');
+      setHistoryTargetId(messageId);
+      setMessages(history.messages);
+      setSearchResults(null);
+    } catch { setChatError('无法打开这条历史记录。'); }
+  }
+
+  async function returnToLatest(): Promise<void> {
+    if (!window.ailover) return;
+    setChatError(null);
+    try {
+      const history = await window.ailover.conversation.load();
+      setHistoryTargetId(null);
+      setMessages(history.messages);
+    } catch { setChatError('无法读取最新聊天记录。'); }
+  }
+
   useEffect(() => {
     if (!window.ailover) return;
     return window.ailover.chat.onStream((event) => handleStreamEvent(event));
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages]);
+    if (historyTargetId) {
+      document.getElementById(`message-${historyTargetId}`)?.scrollIntoView({ block: 'center' });
+    } else {
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages, historyTargetId]);
 
   function handleStreamEvent(event: ChatStreamEvent): void {
     if (event.type === 'started') {
+      setHistoryTargetId(null);
       setMessages((current) => mergeChatMessages(current, [event.userMessage, event.assistantMessage]));
       setRequestId(event.requestId);
       return;
@@ -329,7 +358,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
 
   async function sendText(text: string): Promise<void> {
     const content = text.trim();
-    if (!content || !character || requestId) return;
+    if (!content || !character || requestId || historyTargetId) return;
     setChatError(null);
     setDraft('');
     setRequestId('pending');
@@ -369,10 +398,15 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     {searchResults !== null && <div className="search-results" role="status">
       <div className="search-results-heading">找到 {searchResults.length} 条记录</div>
       {searchResults.map((message) => <button className="search-result" type="button" key={message.id}
-        onClick={() => { setSearchResults(null); document.getElementById(`message-${message.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+        disabled={Boolean(requestId)} onClick={() => void openSearchResult(message.id)}>
         <span>{message.role === 'user' ? '你' : character?.name} · {new Date(message.createdAt).toLocaleString('zh-CN')}</span>
         <strong>{message.content}</strong>
       </button>)}
+    </div>}
+    {historyTargetId && <div className="history-context-notice" role="status">
+      <span>正在查看这条记录附近的历史对话</span>
+      <button type="button" onClick={() => void returnToLatest()}>
+        <ArrowDown size={14} aria-hidden="true" />返回最新消息</button>
     </div>}
     <div className={messages.length ? 'message-list' : 'empty-conversation'}>
       {!messages.length ? <><MessageCircle aria-hidden="true" size={30} strokeWidth={1.5} />
@@ -380,7 +414,7 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
           ? modelConfigured ? `${character.name}已经准备好。说点什么，开始你们的第一段对话。`
             : '角色已经准备好。配置聊天模型后，就可以开始对话。'
           : '创建角色后，即可开始你们的第一段对话。')}</p></> : messages.map((message) =>
-        <article id={`message-${message.id}`} className={`message-row ${message.role}`} key={message.id}>
+        <article id={`message-${message.id}`} className={`message-row ${message.role}${message.id === historyTargetId ? ' history-target' : ''}`} key={message.id}>
           <div className={`message-bubble ${message.status}`}>
             <span className="message-author">{message.role === 'user' ? '你' : character?.name}</span>
             <p>{message.content || (message.status === 'streaming' ? '正在思考…' : '未能生成回复')}</p>
@@ -395,12 +429,12 @@ function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }
     </div>
     {messages.length > 0 && chatError && <div className="chat-notice" role="status">{chatError}</div>}
     <div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
-      disabled={!character || !modelConfigured} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
-      placeholder={!character ? '先创建一位角色' : modelConfigured ? `给${character.name}发消息` : '请先配置聊天模型'} rows={1} maxLength={8000} />
+      disabled={!character || !modelConfigured || Boolean(historyTargetId)} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
+      placeholder={!character ? '先创建一位角色' : historyTargetId ? '返回最新消息后继续对话' : modelConfigured ? `给${character.name}发消息` : '请先配置聊天模型'} rows={1} maxLength={8000} />
       {requestId ? <button aria-label="停止生成" title="停止生成" type="button"
         onClick={() => requestId !== 'pending' && void window.ailover?.chat.cancel(requestId)}>
         <Square size={16} fill="currentColor" aria-hidden="true" /></button>
-        : <button aria-label="发送消息" title="发送消息" disabled={!character || !modelConfigured || !draft.trim()} type="button"
+        : <button aria-label="发送消息" title="发送消息" disabled={!character || !modelConfigured || !draft.trim() || Boolean(historyTargetId)} type="button"
           onClick={() => void sendText(draft)}><SendHorizontal size={18} aria-hidden="true" /></button>}
     </div>
   </div>;
