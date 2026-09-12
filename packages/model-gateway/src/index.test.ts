@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferImageCapabilities, probeModelProvider, streamModelChat } from './index';
+import { inferImageCapabilities, probeModelProvider, requestStructuredMemoryProposals, streamModelChat } from './index';
 
 describe('inferImageCapabilities', () => {
   it('detects image abilities independently from chat connectivity', () => {
@@ -77,5 +77,24 @@ describe('streamModelChat', () => {
     for await (const chunk of streamModelChat({ provider: 'ollama', endpoint: 'http://localhost:11434',
       model: 'qwen', messages: [] }, fetcher)) chunks.push(chunk);
     expect(chunks.join('')).toBe('早上');
+  });
+});
+
+describe('requestStructuredMemoryProposals', () => {
+  it('requests non-streaming JSON from OpenAI-compatible services', async () => {
+    let body = '';
+    const result = await requestStructuredMemoryProposals({ provider: 'openai-compatible', endpoint: 'https://example.test/v1', model: 'model-a', messages: [], sourceText: '我喜欢咖啡' }, async (_url, options) => {
+      body = String(options?.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: '[{"type":"preference"}]' } }] }), { status: 200 });
+    });
+    expect(result).toEqual([{ type: 'preference' }]);
+    expect(body).toContain('"stream":false');
+    expect(body).toContain('response_format');
+  });
+
+  it('parses Ollama JSON and classifies server errors as retryable', async () => {
+    const result = await requestStructuredMemoryProposals({ provider: 'ollama', endpoint: 'http://localhost:11434', model: 'qwen', messages: [], sourceText: '我喜欢咖啡' }, async () => new Response(JSON.stringify({ message: { content: '[]' } }), { status: 200 }));
+    expect(result).toEqual([]);
+    await expect(requestStructuredMemoryProposals({ provider: 'ollama', endpoint: 'http://localhost:11434', model: 'qwen', messages: [], sourceText: 'x' }, async () => new Response('', { status: 503 }))).rejects.toMatchObject({ retryable: true });
   });
 });

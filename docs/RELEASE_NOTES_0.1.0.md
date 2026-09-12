@@ -96,3 +96,4 @@
 - Added a strict schema and local trust boundary for model-proposed semantic, preference, plan and relationship memories.
 - Rejected fabricated, hypothetical, question-shaped and low-confidence evidence before persistence.
 - Kept normalized keys, stored content and plan expiry policy under deterministic local control.
+- Added failure-isolated non-streaming JSON requests for OpenAI-compatible and Ollama providers; chat streaming remains independent.

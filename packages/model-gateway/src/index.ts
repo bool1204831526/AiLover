@@ -48,6 +48,44 @@ export type ModelChatRequest = ModelProbeRequest & {
   timeoutMs?: number;
 };
 
+export type StructuredMemoryExtractionRequest = ModelChatRequest & { sourceText: string };
+
+/** Fetches a bounded JSON proposal payload without putting extraction on the streaming chat path. */
+export async function requestStructuredMemoryProposals(
+  request: StructuredMemoryExtractionRequest,
+  fetcher: FetchLike = fetch,
+): Promise<unknown> {
+  const base = request.endpoint.replace(/\/+$/, '');
+  const url = request.provider === 'ollama' ? `${base}/api/chat` : `${base}/chat/completions`;
+  const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' });
+  if (request.provider === 'openai-compatible' && request.apiKey) headers.set('Authorization', `Bearer ${request.apiKey}`);
+  const messages: ModelChatMessage[] = [
+    { role: 'system', content: '从用户原文提取记忆候选。只输出 JSON 数组，每项包含 type, subject, polarity, confidence, importance, emotionalWeight, evidenceQuote, expiresAt。不要补充原文没有的事实。' },
+    { role: 'user', content: request.sourceText },
+  ];
+  const body = request.provider === 'ollama'
+    ? { model: request.model, messages, stream: false, format: 'json' }
+    : { model: request.model, messages, stream: false, response_format: { type: 'json_object' } };
+  const timeoutSignal = AbortSignal.timeout(request.timeoutMs ?? 20_000);
+  const signal = request.signal ? AbortSignal.any([request.signal, timeoutSignal]) : timeoutSignal;
+  let response: Response;
+  try {
+    response = await fetcher(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+  } catch (error) {
+    if (request.signal?.aborted) throw error;
+    if (timeoutSignal.aborted) throw new ModelGatewayError('结构化记忆提取超时。', true);
+    throw new ModelGatewayError('无法连接模型服务进行结构化记忆提取。', true);
+  }
+  if (!response.ok) {
+    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+    throw new ModelGatewayError(`结构化记忆服务返回 HTTP ${response.status}。`, retryable);
+  }
+  const payload = await response.json() as { choices?: { message?: { content?: unknown } }[]; message?: { content?: unknown } };
+  const content = request.provider === 'ollama' ? payload.message?.content : payload.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') throw new ModelGatewayError('结构化记忆服务返回格式无效。', false);
+  try { return JSON.parse(content); } catch { throw new ModelGatewayError('结构化记忆服务返回的 JSON 无效。', false); }
+}
+
 export class ModelGatewayError extends Error {
   public constructor(message: string, public readonly retryable: boolean) {
     super(message);
