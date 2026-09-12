@@ -717,5 +717,5 @@ function parseStringArray(value: string): string[] {
 
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories, episodicMemories,
-  desktopPetWindowState, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
+  desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
   relationshipStates, users } from './schema';

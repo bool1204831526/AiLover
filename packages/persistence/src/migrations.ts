@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 const migrations = [{
   version: 1,
@@ -322,6 +322,24 @@ const migrations = [{
     CREATE TRIGGER IF NOT EXISTS episodes_fts_delete AFTER DELETE ON episodic_memories BEGIN
       DELETE FROM episodes_fts WHERE episode_id = old.id;
     END;
+  `,
+}, {
+  version: 12,
+  sql: `
+    CREATE TABLE IF NOT EXISTS future_intentions (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      description TEXT NOT NULL,
+      trigger_type TEXT NOT NULL CHECK(trigger_type IN ('time', 'topic', 'return', 'event')),
+      trigger_data TEXT NOT NULL,
+      priority REAL NOT NULL CHECK(priority BETWEEN 0 AND 1),
+      source_memory_ids TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'triggered', 'completed', 'expired')),
+      created_at TEXT NOT NULL,
+      expires_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS future_intentions_pending
+      ON future_intentions(character_id, status, priority DESC);
   `,
 }] as const;
 

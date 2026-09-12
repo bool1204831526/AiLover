@@ -169,3 +169,11 @@ export const assets = sqliteTable('assets', {
   fileName: text('file_name').notNull(), metadata: text('metadata').notNull(),
   createdAt: text('created_at').notNull(),
 });
+
+export const futureIntentions = sqliteTable('future_intentions', {
+  id: text('id').primaryKey(), characterId: text('character_id').notNull().references(() => characters.id),
+  description: text('description').notNull(), triggerType: text('trigger_type').notNull(),
+  triggerData: text('trigger_data').notNull(), priority: real('priority').notNull(),
+  sourceMemoryIds: text('source_memory_ids').notNull(), status: text('status').notNull(),
+  createdAt: text('created_at').notNull(), expiresAt: text('expires_at'),
+});
