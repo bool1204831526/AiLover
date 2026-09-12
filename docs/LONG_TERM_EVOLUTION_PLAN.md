@@ -21,7 +21,7 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 6. Personality Evidence: completed; evidence can be grouped and inspected with recent source explanations.
 7. Relationship Timeline: in progress; important Episode milestones now have a chronological projection.
 8. Emotional Association: completed; relevant past experiences now provide a small bounded emotional echo.
-9. Future Intention: in progress; active plans produce limited, expiry-aware intentions with local return/keyword trigger and expiry transitions.
+9. Future Intention: completed; plans persist across restarts, trigger on a later conversation, expire locally and complete after a successful reply.
 10. Memory Center: let users inspect, correct and delete memories with dependency-safe handling.
 
 Each phase must pass type checking, unit and integration tests before the next dependent phase begins.

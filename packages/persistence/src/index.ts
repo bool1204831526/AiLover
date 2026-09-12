@@ -523,6 +523,18 @@ export class SqliteFutureIntentionRepository {
   public async updateStatus(id: string, status: FutureIntention['status']): Promise<void> {
     this.database.sqlite.prepare('UPDATE future_intentions SET status = ? WHERE id = ?').run(status, id);
   }
+
+  public async expireBefore(characterId: string, now: Date): Promise<void> {
+    this.database.sqlite.prepare(`UPDATE future_intentions SET status = 'expired'
+      WHERE character_id = ? AND status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?`)
+      .run(characterId, now.toISOString());
+  }
+
+  public async hasForSourceMemory(sourceMemoryId: string): Promise<boolean> {
+    const rows = this.database.sqlite.prepare('SELECT source_memory_ids FROM future_intentions').all() as unknown as
+      { source_memory_ids: string }[];
+    return rows.some((row) => parseStringArray(row.source_memory_ids).includes(sourceMemoryId));
+  }
 }
 
 type FutureIntentionRow = { id: string; description: string; trigger_type: string; trigger_data: string;

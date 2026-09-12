@@ -24,7 +24,8 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
-import { buildMemoryCenterEntries, EpisodicMemoryService, MemoryService, type RecalledEpisode,
+import { advanceFutureIntentions, buildMemoryCenterEntries, EpisodicMemoryService,
+  intentionsFromMemories, MemoryService, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
@@ -33,6 +34,7 @@ import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabas
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
   SqliteMemoryRepository, SqliteModelProfileRepository, SqliteCompanionSettingsRepository,
   SqliteEpisodicMemoryRepository,
+  SqliteFutureIntentionRepository,
   SqliteDesktopPetWindowStateRepository,
   validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
@@ -71,6 +73,7 @@ const conversationRepository = new SqliteConversationRepository(database);
 const companionSettingsRepository = new SqliteCompanionSettingsRepository(database);
 const desktopPetWindowStateRepository = new SqliteDesktopPetWindowStateRepository(database);
 const memoryRepository = new SqliteMemoryRepository(database);
+const futureIntentionRepository = new SqliteFutureIntentionRepository(database);
 const memoryService = new MemoryService({ repository: memoryRepository,
   idGenerator: { next: randomUUID } });
 const episodicMemoryService = new EpisodicMemoryService({
@@ -837,9 +840,16 @@ async function completeChat(
   let relatedMemoryIds: string[] = [];
   let isFirstConversationTurn = false;
   let completionReaction: DesktopPetRuntimeState = 'review';
+  let triggeredIntentionIds: string[] = [];
   try {
     const history = await conversationRepository.listMessages(assistantMessage.conversationId);
     isFirstConversationTurn = history.filter(({ role }) => role === 'user').length === 1;
+    await futureIntentionRepository.expireBefore(character.id, userMessage.createdAt);
+    const pendingIntentions = await futureIntentionRepository.listPending(character.id, userMessage.createdAt);
+    const advancedIntentions = advanceFutureIntentions(pendingIntentions, userMessage.createdAt,
+      { returned: !isFirstConversationTurn, text: userMessage.content });
+    const triggeredIntentions = advancedIntentions.filter(({ status }) => status === 'triggered');
+    triggeredIntentionIds = triggeredIntentions.map(({ id }) => id);
     let recalled: RecalledMemory[] = [];
     try {
       recalled = await memoryService.recall({ characterId: character.id, queryMessageId: userMessage.id,
@@ -868,9 +878,11 @@ async function completeChat(
       ? `当前人格表达倾向：\n- ${responsePlan.personalityProjection.join('\n- ')}` : '';
     const selfContext = responsePlan.selfProjection.length
       ? `当前自我认识：\n- ${responsePlan.selfProjection.join('\n- ')}` : '';
+    const intentionContext = triggeredIntentions.length
+      ? `可以自然关心但不要假设结果：\n- ${triggeredIntentions.map(({ description }) => description).join('\n- ')}` : '';
     const cognitionContext = [projectCognition(cognition),
       `回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`,
-      personalityContext, selfContext].filter(Boolean).join('\n');
+      personalityContext, selfContext, intentionContext].filter(Boolean).join('\n');
     episodeEmotion = projectCognition(cognition);
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
@@ -888,6 +900,11 @@ async function completeChat(
     await conversationRepository.updateMessage(assistantMessage.id,
       { content, status: 'completed', model: profile.model });
     completedSuccessfully = true;
+    try {
+      await Promise.all(triggeredIntentionIds.map((id) => futureIntentionRepository.updateStatus(id, 'completed')));
+    } catch (error) {
+      logger.warn({ error }, 'Future intention completion failed');
+    }
     const completed = { ...assistantMessage, content, status: 'completed' as const, model: profile.model };
     emitChatEvent({ type: 'completed', requestId, message: toChatMessage(completed) });
     setDesktopPetActivity(completionReaction, 3_000);
@@ -909,6 +926,14 @@ async function completeChat(
     try {
       await memoryService.capture({ userId: 'local-user', characterId: character.id,
         messageId: userMessage.id, text: userMessage.content, now: userMessage.createdAt });
+      const activeMemories = await memoryRepository.listActive(character.id);
+      const generated = intentionsFromMemories(activeMemories, { next: randomUUID }, userMessage.createdAt);
+      for (const intention of generated) {
+        const sourceId = intention.sourceMemoryIds[0];
+        if (sourceId && !(await futureIntentionRepository.hasForSourceMemory(sourceId))) {
+          await futureIntentionRepository.save(character.id, intention);
+        }
+      }
     } catch (error) {
       logger.warn({ error }, 'Memory capture failed');
     }

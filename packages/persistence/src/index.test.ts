@@ -330,10 +330,17 @@ describe('SqliteCognitionRepository', () => {
       triggerType: 'return', triggerData: { keywords: ['面试'] }, priority: 0.8,
       sourceMemoryIds: ['memory-1'], status: 'pending', createdAt: new Date('2026-09-12'), expiresAt: new Date('2026-09-20') };
     await repository.save('character-1', intention);
+    expect(await repository.hasForSourceMemory('memory-1')).toBe(true);
     expect((await repository.listPending('character-1', new Date('2026-09-13')))[0]?.description)
       .toBe('下次关心面试结果');
     await repository.updateStatus('intention-1', 'triggered');
     expect(await repository.listPending('character-1', new Date('2026-09-13'))).toHaveLength(0);
+    const expired = { ...intention, id: 'intention-expired', sourceMemoryIds: ['memory-2'],
+      expiresAt: new Date('2026-09-13'), status: 'pending' as const };
+    await repository.save('character-1', expired);
+    await repository.expireBefore('character-1', new Date('2026-09-14'));
+    expect(database.sqlite.prepare('SELECT status FROM future_intentions WHERE id = ?').get('intention-expired'))
+      .toEqual({ status: 'expired' });
     database.close();
   });
 });

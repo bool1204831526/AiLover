@@ -63,6 +63,7 @@
 # Future intention lifecycle
 
 - Added deterministic return/keyword triggering and expiry transitions for generated intentions.
+- Persisted plan intentions, deduplicated them by source memory and integrated their lifecycle into chat.
 
 # Memory Center corrections
 
