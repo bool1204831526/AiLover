@@ -7,7 +7,7 @@ import { basename, extname, join, resolve, sep } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray } from 'electron';
 
 import {
-  BootstrapResponseSchema, CharacterDraftSchema, CharacterSnapshotSchema, ChatMessageSchema,
+  BootstrapResponseSchema, CharacterDraftSchema, CharacterLoreSchema, CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, ConversationContextInputSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
@@ -21,16 +21,16 @@ import {
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, createSelfModelEntries, projectCognition,
   relationshipSummary, summarizePersonalityEvidence } from '@ailover/cognition';
-import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendCompanionPrompt,
+import { assembleChatContext, CharacterService, fitDesktopPetBounds, hasOutOfCharacterLeakage, shouldSendCompanionPrompt,
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
-import { createCharacter, type Character } from '@ailover/domain';
+import { createCharacter, isImmersiveCharacterLore, type Character } from '@ailover/domain';
 import { advanceFutureIntentions, buildMemoryCenterEntries, EpisodicMemoryService,
   buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService,
   shouldAttemptStructuredMemoryExtraction, validateStructuredMemoryProposals,
   type ConsolidatedMemory, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
-import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
+import { inferImageCapabilities, ModelGatewayError, probeModelProvider, requestCharacterLore,
   requestStructuredMemoryProposals, streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
 import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
@@ -72,7 +72,8 @@ let smokeTestCompleted = false;
 const userDataPath = app.getPath('userData');
 const databasePath = join(userDataPath, 'data', 'ailover.sqlite');
 const database = openAppDatabase(databasePath);
-const characterService = new CharacterService(new SqliteCharacterRepository(database));
+const characterRepository = new SqliteCharacterRepository(database);
+const characterService = new CharacterService(characterRepository);
 const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
 const companionSettingsRepository = new SqliteCompanionSettingsRepository(database);
@@ -474,6 +475,33 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.characterGetCurrent, async () => {
     const current = await characterService.findCurrent();
     return current ? toCharacterSnapshot(current) : null;
+  });
+  ipcMain.handle(IPC_CHANNELS.characterLoreGenerate, async (_event, input: unknown) => {
+    const draft = CharacterDraftSchema.parse(input);
+    const profile = await modelProfileRepository.get();
+    if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
+    const apiKey = decryptApiKey(profile.encryptedApiKey);
+    const proposal = await requestCharacterLore({ provider: profile.provider, endpoint: profile.endpoint,
+      model: profile.model, seed: { name: draft.name, gender: draft.gender, ageSetting: draft.ageSetting,
+        identity: draft.identity, background: draft.background, appearance: draft.appearance,
+        speakingStyle: draft.speakingStyle, personalityTemplateId: draft.personalityTemplateId,
+        ...(draft.lore ?? {}) }, ...(apiKey ? { apiKey } : {}) });
+    const lore = CharacterLoreSchema.parse(proposal);
+    if (!isImmersiveCharacterLore(lore)) throw new ModelGatewayError('生成的背景未满足沉浸式设定要求，请重试。', true);
+    return lore;
+  });
+  ipcMain.handle(IPC_CHANNELS.characterLoreUpdate, async (_event, input: unknown) => {
+    const lore = CharacterLoreSchema.parse(input);
+    if (!isImmersiveCharacterLore(lore)) {
+      throw new Error('角色设定需要描述通过召唤、次元裂缝或其他跨世界方式来到 AiLover，且不能包含模型或角色卡等元叙事。');
+    }
+    const current = await characterService.findCurrent();
+    if (!current || !(await characterRepository.updateLore(current.id, lore, new Date()))) {
+      throw new Error('当前角色不存在或设定无法保存。');
+    }
+    const updated = await characterService.findCurrent();
+    if (!updated) throw new Error('角色设定保存后无法读取。');
+    return toCharacterSnapshot(updated);
   });
 
   ipcMain.handle(IPC_CHANNELS.memoryList, async () => {
@@ -973,9 +1001,13 @@ async function completeChat(
       ...(apiKey ? { apiKey } : {}) })) {
       if (!content) setDesktopPetActivity('running');
       content += delta;
-      emitChatEvent({ type: 'chunk', requestId, messageId: assistantMessage.id, delta });
     }
     if (!content.trim()) throw new ModelGatewayError('模型没有返回内容，请重试。', true);
+    if (hasOutOfCharacterLeakage(content)) {
+      content = '';
+      throw new ModelGatewayError('回复偏离了角色设定，已拦截，请重试。', true);
+    }
+    emitChatEvent({ type: 'chunk', requestId, messageId: assistantMessage.id, delta: content });
     await conversationRepository.updateMessage(assistantMessage.id,
       { content, status: 'completed', model: profile.model });
     completedSuccessfully = true;

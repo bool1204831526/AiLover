@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   BootstrapResponseSchema,
   CharacterDraftSchema,
+  CharacterLoreSchema,
   CharacterSnapshotSchema,
   ChatSendInputSchema,
   ChatSendReceiptSchema,
@@ -43,6 +44,16 @@ const api: AiLoverDesktopApi = {
     getCurrent: async () => {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterGetCurrent);
       return result === null ? null : CharacterSnapshotSchema.parse(result);
+    },
+    generateLore: async (draft) => {
+      const input = CharacterDraftSchema.parse(draft);
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterLoreGenerate, input);
+      return CharacterLoreSchema.parse(result);
+    },
+    updateLore: async (lore) => {
+      const input = CharacterLoreSchema.parse(lore);
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterLoreUpdate, input);
+      return CharacterSnapshotSchema.parse(result);
     },
   },
   modelProfile: {

@@ -23,5 +23,6 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 8. Emotional Association: completed; relevant past experiences now provide a small bounded emotional echo.
 9. Future Intention: completed; plans persist across restarts, trigger on a later conversation, expire locally and complete after a successful reply.
 10. Memory Center: completed; users can inspect, search, filter, sort, correct and soft-delete memories, review evidence and lifecycle, and resolve linked memories by choosing either version, keeping both or merging them with an audited, character-scoped workflow.
+11. Structured Character Life: completed; manual and model-assisted setup now define a character's prior world, life, worldview, motivations, knowledge limits and arrival into AiLover, with persistent identity context and local immersion guards.
 
 Each phase must pass type checking, unit and integration tests before the next dependent phase begins.

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 import type {
-  BootstrapResponse, CharacterDraftInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
+  BootstrapResponse, CharacterDraftInput, CharacterLoreInput, CharacterSnapshot, ChatMessage, ChatStreamEvent,
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
   RelationshipSummary, CompanionSettings,
   MemoryCenterEntry,
@@ -39,9 +39,25 @@ const petActionInfo: Record<(typeof petActionNames)[number], { name: string; des
   thinking: { name: '思考', description: '等待回复或思考状态', requirement: '推荐' },
   sleep: { name: '睡眠', description: '长时间待机时的循环动作', requirement: '推荐' },
 };
+const emptyLore: CharacterLoreInput = {
+  originWorld: '一个尚未被完整描述的原世界',
+  lifeStory: '在来到这里以前，已经拥有属于自己的人生与经历。',
+  worldview: '以原有世界的经验理解事物，并愿意逐步认识这里。',
+  coreMotivations: '理解这次相遇的意义，在新的生活中建立真实而连续的关系。',
+  knowledgeBoundaries: '只确信亲历、设定和对话中得知的事；不知道时会坦率承认。',
+  arrivalStory: '一次意外的次元裂缝将其带到 AiLover，这里成为抵达后的新居所。',
+};
+const loreFields: { key: keyof CharacterLoreInput; label: string; rows: number; maxLength: number }[] = [
+  { key: 'originWorld', label: '原本的世界', rows: 2, maxLength: 3000 },
+  { key: 'lifeStory', label: '来到这里前的人生', rows: 5, maxLength: 8000 },
+  { key: 'worldview', label: '世界观与认知方式', rows: 3, maxLength: 4000 },
+  { key: 'coreMotivations', label: '内在目标与执念', rows: 3, maxLength: 3000 },
+  { key: 'knowledgeBoundaries', label: '知道与不知道的事', rows: 3, maxLength: 4000 },
+  { key: 'arrivalStory', label: '如何来到 AiLover', rows: 3, maxLength: 3000 },
+];
 const emptyDraft: CharacterDraftInput = {
   name: '', gender: '女', ageSetting: '成年', identity: '你的 AI 伴侣', background: '',
-  appearance: '', speakingStyle: '', personalityTemplateId: 'gentle',
+  appearance: '', speakingStyle: '', personalityTemplateId: 'gentle', lore: emptyLore,
 };
 
 function mergeChatMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
@@ -49,6 +65,12 @@ function mergeChatMessages(current: ChatMessage[], incoming: ChatMessage[]): Cha
   for (const message of incoming) byId.set(message.id, message);
   return retainRecentMessages([...byId.values()].sort((left, right) =>
     new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()));
+}
+
+function characterDraft(character: CharacterSnapshot, lore: CharacterLoreInput): CharacterDraftInput {
+  return { name: character.name, gender: character.gender, ageSetting: character.ageSetting,
+    identity: character.identity, background: character.background, appearance: character.appearance,
+    speakingStyle: character.speakingStyle, personalityTemplateId: character.personalityTemplateId, lore };
 }
 
 export function App(): React.JSX.Element {
@@ -125,7 +147,7 @@ export function App(): React.JSX.Element {
         : activeSection === 'relationship'
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
-            onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
+            onCharacterChange={setCharacter} onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
               ? <MemoryView character={character} onOpenSource={(messageId) => {
                 setChatSourceMessageId(messageId); setActiveSection('chat');
               }} /> : <>
@@ -274,9 +296,10 @@ function memoryResolutionLabel(resolution: MemoryCenterEntry['relations'][number
     'keep-both': '两者并存', merge: '已合并' })[resolution];
 }
 
-function CharacterView({ character, visual, onVisualChange, onCreate }: {
+function CharacterView({ character, visual, onVisualChange, onCharacterChange, onCreate }: {
   character: CharacterSnapshot | null; visual: CharacterVisualProfile | null;
-  onVisualChange(value: CharacterVisualProfile | null): void; onCreate(): void;
+  onVisualChange(value: CharacterVisualProfile | null): void;
+  onCharacterChange(value: CharacterSnapshot): void; onCreate(): void;
 }): React.JSX.Element {
   const [capabilities, setCapabilities] = useState<ImageCapabilities | null>(null);
   const [importing, setImporting] = useState(false);
@@ -284,6 +307,10 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
   const [petPack, setPetPack] = useState<DesktopPetPack | null>(null);
   const [importingPetPack, setImportingPetPack] = useState(false);
   const [petPackError, setPetPackError] = useState<string | null>(null);
+  const [editingLore, setEditingLore] = useState(false);
+  const [loreDraft, setLoreDraft] = useState<CharacterLoreInput>(character?.lore ?? emptyLore);
+  const [loreBusy, setLoreBusy] = useState<'generate' | 'save' | null>(null);
+  const [loreError, setLoreError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!window.ailover) return;
@@ -292,6 +319,24 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
         reason: '暂时无法探测图片能力，可继续使用本地导入' }));
     void window.ailover.visuals.getDesktopPetPack().then(setPetPack);
   }, [character?.id]);
+
+  useEffect(() => { if (character) setLoreDraft(character.lore); }, [character?.id, character?.lore]);
+
+  async function generateLore(): Promise<void> {
+    if (!window.ailover || !character) return;
+    setLoreBusy('generate'); setLoreError(null);
+    try { setLoreDraft(await window.ailover.character.generateLore(characterDraft(character, loreDraft))); }
+    catch { setLoreError('背景生成失败，请检查模型设置后重试。'); }
+    finally { setLoreBusy(null); }
+  }
+
+  async function saveLore(): Promise<void> {
+    if (!window.ailover) return;
+    setLoreBusy('save'); setLoreError(null);
+    try { onCharacterChange(await window.ailover.character.updateLore(loreDraft)); setEditingLore(false); }
+    catch { setLoreError('人生设定无法保存，请检查所有项目。'); }
+    finally { setLoreBusy(null); }
+  }
 
   async function importPortrait(): Promise<void> {
     if (!window.ailover || importing) return;
@@ -321,6 +366,25 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
       <p>先创建角色，再完善她的视觉身份。</p>
       <button className="primary-action" type="button" onClick={onCreate}>创建角色</button>
     </div> : <>
+      <section className="character-lore-section"><div className="settings-heading"><h3>人生与世界设定</h3>
+        <p>{character.lore.originWorld}</p></div>
+        {!editingLore ? <><dl className="lore-summary"><div><dt>过往人生</dt><dd>{character.lore.lifeStory}</dd></div>
+          <div><dt>世界认知</dt><dd>{character.lore.worldview}</dd></div>
+          <div><dt>内在目标</dt><dd>{character.lore.coreMotivations}</dd></div>
+          <div><dt>认知边界</dt><dd>{character.lore.knowledgeBoundaries}</dd></div>
+          <div><dt>来到这里</dt><dd>{character.lore.arrivalStory}</dd></div></dl>
+          <button className="secondary-action" type="button" onClick={() => setEditingLore(true)}>编辑人生设定</button></>
+          : <div className="lore-editor">{loreFields.map((field) => <label key={field.key}><span>{field.label}</span>
+            <textarea rows={field.rows} maxLength={field.maxLength} value={loreDraft[field.key]}
+              onChange={(event) => setLoreDraft({ ...loreDraft, [field.key]: event.target.value })} /></label>)}
+            {loreError && <p className="form-error">{loreError}</p>}
+            <div className="lore-actions"><button className="secondary-action" type="button" disabled={loreBusy !== null}
+              onClick={() => void generateLore()}>{loreBusy === 'generate' ? '正在完善' : '用模型完善'}</button>
+              <button className="secondary-action" type="button" disabled={loreBusy !== null}
+                onClick={() => { setLoreDraft(character.lore); setEditingLore(false); }}>取消</button>
+              <button className="primary-action" type="button" disabled={loreBusy !== null}
+                onClick={() => void saveLore()}>{loreBusy === 'save' ? '正在保存' : '保存设定'}</button></div></div>}
+      </section>
       <section className="visual-asset-section">
         <div className="visual-preview">{visual?.currentAsset
           ? <img src={visual.currentAsset.dataUrl} alt={`${character.name}的角色图`} />
@@ -621,7 +685,7 @@ function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onCom
   });
   const [modelConfigured, setModelConfigured] = useState(initialModelConfigured);
   const [modelResult, setModelResult] = useState<ModelConnectionResult | null>(null);
-  const [busy, setBusy] = useState<'model' | 'character' | null>(null);
+  const [busy, setBusy] = useState<'model' | 'character' | 'lore' | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const draft = initialDraft;
   const complete = Boolean(draft.name.trim() && draft.identity.trim()
@@ -666,6 +730,14 @@ function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onCom
         ? await window.ailover.character.create(draft) : previewCharacter(draft);
       onComplete(character, modelConfigured);
     } catch { setSetupError('角色创建失败，请返回检查角色设定。'); }
+    finally { setBusy(null); }
+  }
+
+  async function generateLore(): Promise<void> {
+    if (!window.ailover || !modelConfigured) return;
+    setBusy('lore'); setSetupError(null);
+    try { onDraftChange({ ...draft, lore: await window.ailover.character.generateLore(draft) }); }
+    catch { setSetupError('人生设定生成失败，请检查模型连接或改为手动填写。'); }
     finally { setBusy(null); }
   }
 
@@ -725,8 +797,17 @@ function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onCom
           onChange={(event) => update('appearance', event.target.value)} /></label>
         <label><span>说话方式</span><textarea required maxLength={1000} rows={2} value={draft.speakingStyle}
           onChange={(event) => update('speakingStyle', event.target.value)} /></label>
-        <label><span>背景故事 <small>可选</small></span><textarea maxLength={4000} rows={3}
-          value={draft.background} onChange={(event) => update('background', event.target.value)} /></label>
+         <label><span>背景故事 <small>可选</small></span><textarea maxLength={4000} rows={3}
+           value={draft.background} onChange={(event) => update('background', event.target.value)} /></label>
+         <fieldset className="lore-fieldset"><legend>完整人生设定</legend>
+           <div className="lore-heading"><button className="secondary-action" disabled={!modelConfigured || busy !== null} type="button"
+               onClick={() => void generateLore()}>{busy === 'lore' ? '正在完善' : '用模型完善'}</button></div>
+           {loreFields.map((field) => <label key={field.key}><span>{field.label}</span>
+             <textarea required rows={field.rows} maxLength={field.maxLength}
+               value={(draft.lore ?? emptyLore)[field.key]}
+               onChange={(event) => update('lore', { ...(draft.lore ?? emptyLore),
+                 [field.key]: event.target.value })} /></label>)}
+         </fieldset>
         <footer><button className="primary-action" disabled={!complete} type="button"
           onClick={() => setStep(3)}>确认角色</button></footer></div>}
       {step === 3 && <div className="onboarding-confirm"><span className="eyebrow">最终确认</span>
@@ -960,9 +1041,19 @@ type CreatorProps = {
 };
 
 function CharacterCreator({ draft, saving, error, onChange, onClose, onSubmit }: CreatorProps): React.JSX.Element {
+  const [generatingLore, setGeneratingLore] = useState(false);
+  const [loreError, setLoreError] = useState<string | null>(null);
   const update = <K extends keyof CharacterDraftInput>(key: K, value: CharacterDraftInput[K]) =>
     onChange({ ...draft, [key]: value });
-  const complete = draft.name.trim() && draft.identity.trim() && draft.appearance.trim() && draft.speakingStyle.trim();
+  const complete = draft.name.trim() && draft.identity.trim() && draft.appearance.trim() && draft.speakingStyle.trim()
+    && Object.values(draft.lore ?? emptyLore).every((value) => value.trim());
+  async function generateLore(): Promise<void> {
+    if (!window.ailover) return;
+    setGeneratingLore(true); setLoreError(null);
+    try { onChange({ ...draft, lore: await window.ailover.character.generateLore(draft) }); }
+    catch { setLoreError('人生设定生成失败，请检查模型设置后重试。'); }
+    finally { setGeneratingLore(false); }
+  }
   return <div className="modal-backdrop" role="presentation"><section className="creator-dialog" role="dialog"
     aria-modal="true" aria-labelledby="creator-title">
     <header><div><span className="eyebrow">创建角色</span><h2 id="creator-title">定义你们的第一次相遇</h2></div>
@@ -991,6 +1082,16 @@ function CharacterCreator({ draft, saving, error, onChange, onClose, onSubmit }:
         placeholder="语气、措辞习惯、称呼方式……" onChange={(e) => update('speakingStyle', e.target.value)} /></label>
       <label><span>背景故事 <small>可选</small></span><textarea maxLength={4000} rows={3} value={draft.background}
         placeholder="她从哪里来，有怎样的经历……" onChange={(e) => update('background', e.target.value)} /></label>
+      <fieldset className="lore-fieldset"><legend>完整人生设定</legend>
+        <div className="lore-heading"><button className="secondary-action" disabled={generatingLore || saving}
+          type="button" onClick={() => void generateLore()}>{generatingLore ? '正在完善' : '用模型完善'}</button></div>
+        {loreFields.map((field) => <label key={field.key}><span>{field.label}</span>
+          <textarea required rows={field.rows} maxLength={field.maxLength}
+            value={(draft.lore ?? emptyLore)[field.key]} onChange={(event) => update('lore', {
+              ...(draft.lore ?? emptyLore), [field.key]: event.target.value,
+            })} /></label>)}
+      </fieldset>
+      {loreError && <p className="form-error">{loreError}</p>}
       {error && <p className="form-error">{error}</p>}
     </div><footer><button className="secondary-action" onClick={onClose} type="button">取消</button>
       <button className="primary-action" disabled={!complete || saving} type="submit">{saving ? '正在创建' : '确认创建'}</button></footer></form>
@@ -998,7 +1099,7 @@ function CharacterCreator({ draft, saving, error, onChange, onClose, onSubmit }:
 }
 
 function previewCharacter(draft: CharacterDraftInput): CharacterSnapshot {
-  return { ...draft, id: 'preview-character', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  return { ...draft, lore: draft.lore ?? emptyLore, id: 'preview-character', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     personalityBaseline: { warmth: 0.8, energy: 0.5, reserve: 0.4, playfulness: 0.5,
       maturity: 0.6, rationality: 0.6, initiative: 0.5 } };
 }

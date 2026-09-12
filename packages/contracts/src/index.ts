@@ -4,6 +4,8 @@ export const IPC_CHANNELS = {
   appBootstrap: 'app:bootstrap',
   characterCreate: 'character:create',
   characterGetCurrent: 'character:get-current',
+  characterLoreGenerate: 'character-lore:generate',
+  characterLoreUpdate: 'character-lore:update',
   modelProfileGet: 'model-profile:get',
   modelProfileSave: 'model-profile:save',
   modelProfileTest: 'model-profile:test',
@@ -246,6 +248,16 @@ export const PersonalityTemplateIdSchema = z.enum([
   'gentle', 'energetic', 'reserved', 'tsundere', 'mature', 'rational',
 ]);
 
+export const CharacterLoreSchema = z.object({
+  originWorld: z.string().trim().min(1).max(3000),
+  lifeStory: z.string().trim().min(1).max(8000),
+  worldview: z.string().trim().min(1).max(4000),
+  coreMotivations: z.string().trim().min(1).max(3000),
+  knowledgeBoundaries: z.string().trim().min(1).max(4000),
+  arrivalStory: z.string().trim().min(1).max(3000),
+}).strict();
+export type CharacterLoreInput = z.infer<typeof CharacterLoreSchema>;
+
 export const CharacterDraftSchema = z.object({
   name: z.string().trim().min(1).max(40),
   gender: z.string().trim().min(1).max(30),
@@ -255,6 +267,7 @@ export const CharacterDraftSchema = z.object({
   appearance: z.string().trim().min(1).max(2000),
   speakingStyle: z.string().trim().min(1).max(1000),
   personalityTemplateId: PersonalityTemplateIdSchema,
+  lore: CharacterLoreSchema.optional(),
 });
 
 export type CharacterDraftInput = z.infer<typeof CharacterDraftSchema>;
@@ -267,6 +280,7 @@ export const PersonalityValuesSchema = z.object({
 });
 
 export const CharacterSnapshotSchema = CharacterDraftSchema.extend({
+  lore: CharacterLoreSchema,
   id: z.string().min(1),
   personalityBaseline: PersonalityValuesSchema,
   createdAt: z.iso.datetime(),
@@ -356,6 +370,8 @@ export interface AiLoverDesktopApi {
   character: {
     create(draft: CharacterDraftInput): Promise<CharacterSnapshot>;
     getCurrent(): Promise<CharacterSnapshot | null>;
+    generateLore(draft: CharacterDraftInput): Promise<CharacterLoreInput>;
+    updateLore(lore: CharacterLoreInput): Promise<CharacterSnapshot>;
   };
   modelProfile: {
     get(): Promise<ModelProfileSnapshot | null>;

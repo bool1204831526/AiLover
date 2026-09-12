@@ -19,7 +19,7 @@ import type { EpisodeSource, EpisodicMemoryRepository, MemoryRepository, MemoryT
 import type { CompanionSettings } from '@ailover/contracts';
 
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
-import { characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
+import { characterLore, characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
 
 const LOCAL_USER_ID = 'local-user';
 
@@ -113,6 +113,11 @@ export class SqliteCharacterRepository implements CharacterRepository {
         characterId: character.id, ...character.personalityBaseline,
         createdAt: character.createdAt.toISOString(),
       }).run();
+      this.database.orm.insert(characterLore).values({ characterId: character.id,
+        originWorld: character.lore.originWorld, lifeStory: character.lore.lifeStory,
+        worldview: character.lore.worldview, coreMotivations: character.lore.coreMotivations,
+        knowledgeBoundaries: character.lore.knowledgeBoundaries, arrivalStory: character.lore.arrivalStory,
+        source: 'user', updatedAt: character.updatedAt.toISOString() }).run();
     })();
   }
 
@@ -124,18 +129,31 @@ export class SqliteCharacterRepository implements CharacterRepository {
     return this.find(and(eq(characters.userId, LOCAL_USER_ID), eq(characters.status, 'active')));
   }
 
+  public async updateLore(id: CharacterId, lore: Character['lore'], updatedAt: Date): Promise<boolean> {
+    const result = this.database.orm.update(characterLore).set({ ...lore, source: 'user',
+      updatedAt: updatedAt.toISOString() }).where(eq(characterLore.characterId, id)).run();
+    if (result.changes) this.database.orm.update(characters).set({ updatedAt: updatedAt.toISOString() })
+      .where(and(eq(characters.id, id), eq(characters.status, 'active'))).run();
+    return result.changes > 0;
+  }
+
   private find(condition: ReturnType<typeof and>): Character | null {
     const row = this.database.orm.select().from(characters)
       .innerJoin(personalityBaselines, eq(characters.id, personalityBaselines.characterId))
+      .innerJoin(characterLore, eq(characters.id, characterLore.characterId))
       .where(condition).limit(1).get();
     if (!row) return null;
     const profile = row.characters;
     const baseline = row.personality_baselines;
+    const lore = row.character_lore;
     return {
       id: profile.id as CharacterId, name: profile.name, gender: profile.gender,
       ageSetting: profile.ageSetting, identity: profile.identity, background: profile.background,
       appearance: profile.appearance, speakingStyle: profile.speakingStyle,
       personalityTemplateId: profile.personalityTemplateId as PersonalityTemplateId,
+      lore: { originWorld: lore.originWorld, lifeStory: lore.lifeStory, worldview: lore.worldview,
+        coreMotivations: lore.coreMotivations, knowledgeBoundaries: lore.knowledgeBoundaries,
+        arrivalStory: lore.arrivalStory },
       personalityBaseline: {
         warmth: baseline.warmth, energy: baseline.energy, reserve: baseline.reserve,
         playfulness: baseline.playfulness, maturity: baseline.maturity,

@@ -103,3 +103,16 @@
 - Added failure-isolated non-streaming JSON requests for OpenAI-compatible and Ollama providers; chat streaming remains independent.
 - Connected validated proposals to successful-chat memory capture as a background task, while preserving deterministic local extraction as the fallback.
 - Skipped secondary model calls for ordinary short chat, questions and uncertain claims, and bounded extraction input to control cost.
+
+# Structured character life
+
+- Added a complete life setting for every companion: origin world, prior life, worldview, motivations,
+  knowledge boundaries and the dimensional event that brought them into AiLover.
+- Added detailed manual editing during onboarding, character creation and the active character view.
+- Added model-assisted setting generation from the character details already entered, with strict local
+  schema validation and preservation of user-provided seed information.
+- Added schema 17 persistence and a forward migration that preserves existing character backgrounds.
+- Added identity-first chat context rules that keep replies grounded in the character's life, personality,
+  known facts and limits instead of inventing unsupported history.
+- Added local immersion validation for generated and manually saved settings, plus a reply guard that
+  blocks explicit model, prompt, character-card and role-play leakage before it reaches the interface.

@@ -49,6 +49,51 @@ export type ModelChatRequest = ModelProbeRequest & {
 };
 
 export type StructuredMemoryExtractionRequest = ModelChatRequest & { sourceText: string };
+export type CharacterLoreGenerationRequest = ModelProbeRequest & {
+  model: string;
+  seed: Record<string, string>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+export async function requestCharacterLore(
+  request: CharacterLoreGenerationRequest,
+  fetcher: FetchLike = fetch,
+): Promise<unknown> {
+  const base = request.endpoint.replace(/\/+$/, '');
+  const url = request.provider === 'ollama' ? `${base}/api/chat` : `${base}/chat/completions`;
+  const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' });
+  if (request.provider === 'openai-compatible' && request.apiKey) headers.set('Authorization', `Bearer ${request.apiKey}`);
+  const messages: ModelChatMessage[] = [{ role: 'system', content: [
+    '根据用户已填写的角色资料，补全一份具有完整人生连续性的虚构角色设定。',
+    '只输出 JSON 对象，且只能包含 originWorld, lifeStory, worldview, coreMotivations, knowledgeBoundaries, arrivalStory 六个字符串字段。',
+    '保持用户提供的姓名、身份、背景、性格和说话方式，不得改写其核心含义。',
+    '角色在来到本应用前已经真实生活过；arrivalStory 必须描述一次召唤、次元裂缝或合理的跨世界事件，使角色来到 AiLover。',
+    '设定应具体、相互一致，不引用语言模型、提示词、角色扮演或生成过程。知识边界应说明角色确信什么、不了解什么，避免全知。',
+  ].join('\n') }, { role: 'user', content: JSON.stringify(request.seed) }];
+  const body = request.provider === 'ollama'
+    ? { model: request.model, messages, stream: false, format: 'json' }
+    : { model: request.model, messages, stream: false, response_format: { type: 'json_object' } };
+  const timeoutSignal = AbortSignal.timeout(request.timeoutMs ?? 45_000);
+  const signal = request.signal ? AbortSignal.any([request.signal, timeoutSignal]) : timeoutSignal;
+  let response: Response;
+  try {
+    response = await fetcher(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+  } catch (error) {
+    if (request.signal?.aborted) throw error;
+    if (timeoutSignal.aborted) throw new ModelGatewayError('角色背景生成超时，请重试。', true);
+    throw new ModelGatewayError('无法连接模型服务生成角色背景。', true);
+  }
+  if (!response.ok) throw new ModelGatewayError(`角色背景服务返回 HTTP ${response.status}。`,
+    response.status === 408 || response.status === 429 || response.status >= 500);
+  const payload = await response.json() as { choices?: { message?: { content?: unknown } }[]; message?: { content?: unknown } };
+  const content = request.provider === 'ollama' ? payload.message?.content : payload.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') throw new ModelGatewayError('角色背景服务返回格式无效。', false);
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return parsed && typeof parsed === 'object' && 'lore' in parsed ? (parsed as { lore: unknown }).lore : parsed;
+  } catch { throw new ModelGatewayError('角色背景服务返回的 JSON 无效。', false); }
+}
 
 /** Fetches a bounded JSON proposal payload without putting extraction on the streaming chat path. */
 export async function requestStructuredMemoryProposals(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createCharacter, DomainError } from './index';
+import { createCharacter, DomainError, isImmersiveCharacterLore } from './index';
 
 describe('DomainError', () => {
   it('retains a stable code and context', () => {
@@ -25,6 +25,7 @@ describe('createCharacter', () => {
     });
     expect(character.name).toBe('艾琳');
     expect(character.personalityBaseline.reserve).toBeGreaterThan(0.7);
+    expect(character.lore.arrivalStory).toContain('次元裂缝');
     expect(character.createdAt).toBe(createdAt);
   });
 
@@ -32,5 +33,23 @@ describe('createCharacter', () => {
     expect(() => createCharacter({ ...draft, name: '  ' }, {
       idGenerator: { next: () => 'character-1' }, clock: { now: () => new Date() },
     })).toThrowError(DomainError);
+  });
+
+  it('rejects generated lore that leaks model metadata or lacks arrival continuity', () => {
+    const lore = createCharacter(draft, { idGenerator: { next: () => 'character-1' },
+      clock: { now: () => new Date() } }).lore;
+    expect(isImmersiveCharacterLore(lore)).toBe(true);
+    expect(isImmersiveCharacterLore({ ...lore, lifeStory: '我是语言模型生成的角色卡' })).toBe(false);
+    expect(isImmersiveCharacterLore({ ...lore, arrivalStory: '我一直住在这里' })).toBe(false);
+  });
+
+  it('rejects non-immersive lore when creating a character', () => {
+    expect(() => createCharacter({ ...draft, lore: {
+      originWorld: '现代城市', lifeStory: '由语言模型按照角色卡生成', worldview: '理性',
+      coreMotivations: '陪伴用户', knowledgeBoundaries: '不了解未发生的事',
+      arrivalStory: '一直生活在本地',
+    } }, { idGenerator: { next: () => 'character-1' }, clock: { now: () => new Date() } }))
+      .toThrowError(new DomainError('character.invalid_lore',
+        'Character lore must preserve an immersive arrival into AiLover and exclude model metadata'));
   });
 });

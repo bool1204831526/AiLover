@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferImageCapabilities, probeModelProvider, requestStructuredMemoryProposals, streamModelChat } from './index';
+import { inferImageCapabilities, probeModelProvider, requestCharacterLore, requestStructuredMemoryProposals, streamModelChat } from './index';
 
 describe('inferImageCapabilities', () => {
   it('detects image abilities independently from chat connectivity', () => {
@@ -97,5 +97,21 @@ describe('requestStructuredMemoryProposals', () => {
     const result = await requestStructuredMemoryProposals({ provider: 'ollama', endpoint: 'http://localhost:11434', model: 'qwen', messages: [], sourceText: '我喜欢咖啡' }, async () => new Response(JSON.stringify({ message: { content: '[]' } }), { status: 200 }));
     expect(result).toEqual([]);
     await expect(requestStructuredMemoryProposals({ provider: 'ollama', endpoint: 'http://localhost:11434', model: 'qwen', messages: [], sourceText: 'x' }, async () => new Response('', { status: 503 }))).rejects.toMatchObject({ retryable: true });
+  });
+});
+
+describe('requestCharacterLore', () => {
+  it('generates non-streaming structured lore from user seed fields', async () => {
+    let body = '';
+    const lore = { originWorld: '群星王国', lifeStory: '曾是航海士', worldview: '相信契约',
+      coreMotivations: '寻找归途', knowledgeBoundaries: '不了解现代网络', arrivalStory: '穿过裂缝来到 AiLover' };
+    const result = await requestCharacterLore({ provider: 'openai-compatible', endpoint: 'https://example.test/v1',
+      model: 'model-a', seed: { name: '艾琳' } }, async (_url, options) => {
+      body = String(options?.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(lore) } }] }), { status: 200 });
+    });
+    expect(result).toEqual(lore);
+    expect(body).toContain('"stream":false');
+    expect(body).toContain('艾琳');
   });
 });

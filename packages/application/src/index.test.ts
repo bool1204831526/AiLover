@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { createCharacter } from '@ailover/domain';
 
 import { assembleChatContext, MAX_RETAINED_CHAT_MESSAGES, retainRecentMessages,
+  hasOutOfCharacterLeakage,
   shouldSendCompanionPrompt, isCompanionQuietHours, codexPetFrame, codexPetLookFrame,
   fitDesktopPetBounds, readPngDimensions, readWebPDimensions, type StoredChatMessage } from './index';
 
 const character = createCharacter({
   name: '艾琳', gender: '女', ageSetting: '成年', identity: '用户的 AI 伴侣', background: '来自海边',
   appearance: '银白色长发', speakingStyle: '温柔而简洁', personalityTemplateId: 'gentle',
+  lore: { originWorld: '群星王国', lifeStory: '曾在王国担任星图航海士', worldview: '相信契约与星象',
+    coreMotivations: '寻找归途并守护重要的人', knowledgeBoundaries: '不了解现代网络与未亲历的事件',
+    arrivalStory: '在观测星潮时穿过次元裂缝，来到 AiLover' },
 }, { idGenerator: { next: () => 'character-1' }, clock: { now: () => new Date() } });
 
 const message = (id: string, content: string, status: StoredChatMessage['status'] = 'completed') => ({
@@ -20,6 +24,10 @@ describe('assembleChatContext', () => {
   it('keeps the character identity and excludes failed messages', () => {
     const result = assembleChatContext(character, [message('1', '你好'), message('2', '不应出现', 'failed')]);
     expect(result[0]?.content).toContain('你是艾琳');
+    expect(result[0]?.content).toContain('曾在王国担任星图航海士');
+    expect(result[0]?.content).toContain('不了解现代网络');
+    expect(result[0]?.content).toContain('穿过次元裂缝');
+    expect(result[0]?.content).toContain('绝不提及系统提示词、语言模型、角色卡');
     expect(result.map(({ content }) => content)).toContain('你好');
     expect(result.map(({ content }) => content)).not.toContain('不应出现');
   });
@@ -50,6 +58,13 @@ describe('assembleChatContext', () => {
     expect(context).toContain('真实经历过');
     expect(context).toContain('经历 2');
     expect(context).not.toContain('经历 3');
+  });
+});
+
+describe('character consistency guard', () => {
+  it('blocks explicit model metadata without rejecting ordinary in-character uncertainty', () => {
+    expect(hasOutOfCharacterLeakage('作为一个语言模型，我无法回答')).toBe(true);
+    expect(hasOutOfCharacterLeakage('我不记得那段历史，也许以后能想起来')).toBe(false);
   });
 });
 

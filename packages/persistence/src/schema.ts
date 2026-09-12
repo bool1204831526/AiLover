@@ -49,6 +49,14 @@ export const personalityBaselines = sqliteTable('personality_baselines', {
   initiative: real('initiative').notNull(), createdAt: text('created_at').notNull(),
 });
 
+export const characterLore = sqliteTable('character_lore', {
+  characterId: text('character_id').primaryKey().references(() => characters.id),
+  originWorld: text('origin_world').notNull(), lifeStory: text('life_story').notNull(),
+  worldview: text('worldview').notNull(), coreMotivations: text('core_motivations').notNull(),
+  knowledgeBoundaries: text('knowledge_boundaries').notNull(), arrivalStory: text('arrival_story').notNull(),
+  source: text('source').notNull(), updatedAt: text('updated_at').notNull(),
+});
+
 export const modelProfiles = sqliteTable('model_profiles', {
   id: text('id').primaryKey(),
   provider: text('provider').notNull(),

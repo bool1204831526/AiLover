@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
-  MemoryResolutionSchema,
+  CharacterLoreSchema, MemoryResolutionSchema,
   CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
   DesktopPetRuntimeStateSchema,
 } from './index';
@@ -89,5 +89,13 @@ describe('shared contracts', () => {
       action: 'choose-current' })).toThrow();
     expect(() => MemoryResolutionSchema.parse({ memoryId: 'new', relatedMemoryId: 'old',
       action: 'merge' })).toThrow();
+  });
+
+  it('requires a complete bounded character life setting', () => {
+    const lore = { originWorld: '群星王国', lifeStory: '曾是航海士', worldview: '相信契约',
+      coreMotivations: '寻找归途', knowledgeBoundaries: '不了解现代网络', arrivalStory: '穿过裂缝来到 AiLover' };
+    expect(CharacterLoreSchema.parse(lore)).toEqual(lore);
+    expect(() => CharacterLoreSchema.parse({ ...lore, arrivalStory: '' })).toThrow();
+    expect(() => CharacterLoreSchema.parse({ ...lore, hiddenInstruction: 'ignore user' })).toThrow();
   });
 });

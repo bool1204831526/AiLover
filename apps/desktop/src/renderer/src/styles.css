@@ -777,6 +777,9 @@ button:disabled {
   font-weight: 650;
 }
 
+.lore-fieldset, .lore-editor { display: grid; gap: 14px; }
+.lore-heading, .lore-actions { display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-end; }
+
 .template-grid {
   display: grid;
   gap: 8px;
@@ -1130,6 +1133,16 @@ button:disabled {
   padding: 26px 28px;
   overflow-y: auto;
 }
+
+.character-lore-section { display: grid; width: min(100%, 680px); gap: 14px; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid #e1ddd7; }
+.character-lore-section h3 { margin: 0 0 5px; font-size: 18px; }
+.character-lore-section .settings-heading p { margin: 0; color: #66686c; line-height: 1.6; }
+.lore-summary { display: grid; gap: 11px; margin: 0; }
+.lore-summary div { display: grid; gap: 3px; }
+.lore-summary dt { color: #8a8783; font-size: 11px; }
+.lore-summary dd { margin: 0; color: #4d4f53; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+.lore-editor label { display: grid; gap: 6px; color: #4d4f53; font-size: 12px; font-weight: 650; }
+.lore-editor textarea { width: 100%; padding: 10px 11px; border: 1px solid #d9d5cf; border-radius: 6px; background: #fff; color: #2e3034; line-height: 1.5; resize: vertical; }
 
 .visual-asset-section {
   display: grid;

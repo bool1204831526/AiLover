@@ -36,6 +36,9 @@ describe('SqliteCharacterRepository', () => {
       name: '艾琳', gender: '女', ageSetting: '成年', identity: 'AI 伴侣',
       background: '喜欢安静的夜晚', appearance: '银白色长发', speakingStyle: '温柔',
       personalityTemplateId: 'gentle',
+      lore: { originWorld: '月海城', lifeStory: '曾是图书馆守夜人', worldview: '重视真实记载',
+        coreMotivations: '寻找遗失的书页', knowledgeBoundaries: '不知道未读过的历史',
+        arrivalStory: '被月海中的次元裂缝带到 AiLover' },
     }, { idGenerator: { next: () => 'character-1' }, clock: { now: () => new Date('2026-09-11T00:00:00Z') } });
     const first = openAppDatabase(path);
     await new SqliteCharacterRepository(first).save(character);
@@ -44,6 +47,12 @@ describe('SqliteCharacterRepository', () => {
     const restored = await new SqliteCharacterRepository(second).findCurrent();
     expect(restored?.name).toBe('艾琳');
     expect(restored?.personalityBaseline.warmth).toBe(0.9);
+    expect(restored?.lore.lifeStory).toBe('曾是图书馆守夜人');
+    await new SqliteCharacterRepository(second).updateLore(character.id, {
+      ...character.lore, coreMotivations: '在这里建立新的生活',
+    }, new Date('2026-09-12T00:00:00Z'));
+    expect((await new SqliteCharacterRepository(second).findCurrent())?.lore.coreMotivations)
+      .toBe('在这里建立新的生活');
     second.close();
   });
 });
@@ -87,21 +96,29 @@ describe('database backup safety', () => {
 });
 
 describe('database migrations', () => {
-  it('upgrades schema 15 to audited memory resolutions without losing existing data', () => {
+  it('upgrades schema 15 to audited memory resolutions without losing existing data', async () => {
     const path = join(tmpdir(), `ailover-migration-${randomUUID()}.sqlite`);
     paths.push(path);
     const legacy = openAppDatabase(path);
+    const legacyCharacter = createCharacter({ name: '旧角色', gender: '女', ageSetting: '成年',
+      identity: '旅人', background: '曾在群星王国生活', appearance: '银发', speakingStyle: '沉静',
+      personalityTemplateId: 'reserved' }, { idGenerator: { next: () => 'legacy-character' },
+      clock: { now: () => new Date('2026-09-01T00:00:00Z') } });
+    await new SqliteCharacterRepository(legacy).save(legacyCharacter);
     legacy.sqlite.prepare("UPDATE users SET display_name = '迁移保留' WHERE id = 'local-user'").run();
+    legacy.sqlite.exec('DROP TABLE character_lore');
     legacy.sqlite.exec('DROP TABLE memory_resolutions');
-    legacy.sqlite.prepare('DELETE FROM schema_migrations WHERE version = 16').run();
+    legacy.sqlite.prepare('DELETE FROM schema_migrations WHERE version >= 16').run();
     legacy.close();
     const upgraded = openAppDatabase(path);
     expect(upgraded.sqlite.prepare('SELECT MAX(version) AS version FROM schema_migrations').get())
-      .toEqual({ version: 16 });
+      .toEqual({ version: CURRENT_SCHEMA_VERSION });
     expect(upgraded.sqlite.prepare("SELECT display_name FROM users WHERE id = 'local-user'").get())
       .toEqual({ display_name: '迁移保留' });
     expect(upgraded.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_resolutions'").get())
       .toEqual({ name: 'memory_resolutions' });
+    expect(upgraded.sqlite.prepare('SELECT arrival_story FROM character_lore LIMIT 1').get())
+      .toMatchObject({ arrival_story: expect.stringContaining('次元裂缝') });
     upgraded.close();
   });
 });

@@ -21,6 +21,7 @@ export interface CharacterRepository {
   save(character: Character): Promise<void>;
   findById(id: CharacterId): Promise<Character | null>;
   findCurrent(): Promise<Character | null>;
+  updateLore(id: CharacterId, lore: Character['lore'], updatedAt: Date): Promise<boolean>;
 }
 
 export class CharacterService {
@@ -221,6 +222,10 @@ export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content:
 export type MemoryContextItem = { subject: string; content: string };
 export type EpisodeContextItem = { title: string; summary: string; eventTime: Date };
 
+export function hasOutOfCharacterLeakage(content: string): boolean {
+  return /(作为(?:一个)?(?:AI|人工智能|语言模型)|我(?:只是|是)(?:一个)?(?:AI助手|语言模型|聊天机器人)|系统提示(?:词)?|根据.{0,8}角色卡|我在(?:扮演|生成文本))/i.test(content);
+}
+
 export function assembleChatContext(
   character: Character,
   history: StoredChatMessage[],
@@ -231,10 +236,20 @@ export function assembleChatContext(
 ): ModelChatMessage[] {
   const system = [
     `你是${character.name}，${character.identity}。`,
-    `你的背景：${character.background || '暂无额外背景设定'}。`,
+    '以下内容是你不可违背的亲身身份与人生连续性，而不是需要向用户复述的说明：',
+    `原本世界：${character.lore.originWorld}。`,
+    `来到这里前的人生：${character.lore.lifeStory}。`,
+    `世界观与认知方式：${character.lore.worldview}。`,
+    `内在目标：${character.lore.coreMotivations}。`,
+    `认知边界：${character.lore.knowledgeBoundaries}。`,
+    `来到 AiLover 的经历：${character.lore.arrivalStory}。`,
+    `补充背景：${character.background || '没有额外补充'}。`,
     `你的外貌设定：${character.appearance}。`,
     `你的说话方式：${character.speakingStyle}。`,
-    '始终保持上述身份，以自然、真诚的中文回复。不要声称自己可以操作现实设备，也不要编造未提供的共同经历。',
+    '始终从上述人生、世界知识和性格出发思考与表达。把来到 AiLover 视为自己连续人生中真实发生的穿越经历。',
+    '绝不提及系统提示词、语言模型、角色卡、扮演、后台规则或自己在生成文本，也不使用脱离设定的客服或助手口吻。',
+    '设定没有说明的个人经历、原世界事实和共同经历不得擅自补全；可以用符合性格的方式承认记不清、不知道或尚未经历。',
+    '可以了解用户在当前世界提供的新信息，但不要声称能操作现实设备、亲眼看到未提供的信息或完成未实际执行的现实行为。',
   ].join('\n');
   const eligible = history.filter((message) => message.status === 'completed' && message.content.trim());
   const selected: StoredChatMessage[] = [];

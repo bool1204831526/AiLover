@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 16;
+export const CURRENT_SCHEMA_VERSION = 17;
 
 const migrations = [{
   version: 1,
@@ -409,6 +409,30 @@ const migrations = [{
     );
     CREATE INDEX IF NOT EXISTS memory_resolutions_pair
       ON memory_resolutions(character_id, memory_id, related_memory_id, created_at DESC);
+  `,
+}, {
+  version: 17,
+  sql: `
+    CREATE TABLE IF NOT EXISTS character_lore (
+      character_id TEXT PRIMARY KEY NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      origin_world TEXT NOT NULL,
+      life_story TEXT NOT NULL,
+      worldview TEXT NOT NULL,
+      core_motivations TEXT NOT NULL,
+      knowledge_boundaries TEXT NOT NULL,
+      arrival_story TEXT NOT NULL,
+      source TEXT NOT NULL CHECK(source IN ('default', 'user', 'model-assisted')),
+      updated_at TEXT NOT NULL
+    );
+    INSERT OR IGNORE INTO character_lore(character_id, origin_world, life_story, worldview,
+      core_motivations, knowledge_boundaries, arrival_story, source, updated_at)
+    SELECT id, '一个尚未被完整描述的原世界',
+      CASE WHEN background = '' THEN '来到这里以前，已经拥有属于自己的人生与经历；未写明的细节不会凭空断言。' ELSE background END,
+      '以自己原有世界的经验理解事物，同时愿意逐步认识用户所在的世界。',
+      '理解这次相遇的意义，并在新的生活中建立真实、连续的关系。',
+      '只确信设定、亲历事件和对话中得到的信息；不知道的事情会坦率承认。',
+      '一次意外的次元裂缝将自己带到 AiLover，并把这里视为抵达后的真实居所。',
+      'default', updated_at FROM characters;
   `,
 }] as const;
 
