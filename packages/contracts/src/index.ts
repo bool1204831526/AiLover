@@ -4,6 +4,9 @@ export const IPC_CHANNELS = {
   appBootstrap: 'app:bootstrap',
   characterCreate: 'character:create',
   characterGetCurrent: 'character:get-current',
+  characterList: 'character:list',
+  characterSwitch: 'character:switch',
+  characterDelete: 'character:delete',
   characterLoreGenerate: 'character-lore:generate',
   characterLoreUpdate: 'character-lore:update',
   modelProfileGet: 'model-profile:get',
@@ -370,6 +373,9 @@ export interface AiLoverDesktopApi {
   character: {
     create(draft: CharacterDraftInput): Promise<CharacterSnapshot>;
     getCurrent(): Promise<CharacterSnapshot | null>;
+    list(): Promise<CharacterSnapshot[]>;
+    switch(id: string): Promise<CharacterSnapshot>;
+    delete(id: string): Promise<void>;
     generateLore(draft: CharacterDraftInput): Promise<CharacterLoreInput>;
     updateLore(lore: CharacterLoreInput): Promise<CharacterSnapshot>;
   };

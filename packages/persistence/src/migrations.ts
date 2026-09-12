@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 const migrations = [{
   version: 1,
@@ -434,6 +434,9 @@ const migrations = [{
       '一次意外的次元裂缝将自己带到 AiLover，并把这里视为抵达后的真实居所。',
       'default', updated_at FROM characters;
   `,
+}, {
+  version: 18,
+  sql: `DROP INDEX IF EXISTS characters_one_active;`,
 }] as const;
 
 export function migrate(database: Database.Database): void {

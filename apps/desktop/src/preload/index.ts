@@ -45,6 +45,9 @@ const api: AiLoverDesktopApi = {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterGetCurrent);
       return result === null ? null : CharacterSnapshotSchema.parse(result);
     },
+    list: async () => CharacterSnapshotSchema.array().parse(await ipcRenderer.invoke(IPC_CHANNELS.characterList)),
+    switch: async (id) => CharacterSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.characterSwitch, id)),
+    delete: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.characterDelete, id); },
     generateLore: async (draft) => {
       const input = CharacterDraftSchema.parse(draft);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterLoreGenerate, input);

@@ -21,6 +21,9 @@ export interface CharacterRepository {
   save(character: Character): Promise<void>;
   findById(id: CharacterId): Promise<Character | null>;
   findCurrent(): Promise<Character | null>;
+  list(): Promise<Character[]>;
+  activate(id: CharacterId): Promise<boolean>;
+  delete(id: CharacterId): Promise<boolean>;
   updateLore(id: CharacterId, lore: Character['lore'], updatedAt: Date): Promise<boolean>;
 }
 
@@ -28,14 +31,17 @@ export class CharacterService {
   public constructor(private readonly repository: CharacterRepository) {}
 
   public async create(character: Character): Promise<Character> {
-    if (await this.repository.findCurrent()) throw new Error('A character already exists');
     await this.repository.save(character);
+    await this.repository.activate(character.id);
     return character;
   }
 
   public findCurrent(): Promise<Character | null> {
     return this.repository.findCurrent();
   }
+  public list(): Promise<Character[]> { return this.repository.list(); }
+  public activate(id: CharacterId): Promise<boolean> { return this.repository.activate(id); }
+  public delete(id: CharacterId): Promise<boolean> { return this.repository.delete(id); }
 }
 
 export type StoredModelProfile = {

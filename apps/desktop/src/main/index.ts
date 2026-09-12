@@ -476,6 +476,29 @@ function registerIpcHandlers(): void {
     const current = await characterService.findCurrent();
     return current ? toCharacterSnapshot(current) : null;
   });
+  ipcMain.handle(IPC_CHANNELS.characterList, async () => {
+    const characters = await characterService.list();
+    return characters.map(toCharacterSnapshot);
+  });
+  ipcMain.handle(IPC_CHANNELS.characterSwitch, async (_event, id: unknown) => {
+    if (typeof id !== 'string' || !(await characterService.activate(id as Character['id']))) {
+      throw new Error('角色不存在或无法切换。');
+    }
+    const current = await characterService.findCurrent();
+    if (!current) throw new Error('角色切换后无法读取当前角色。');
+    return toCharacterSnapshot(current);
+  });
+  ipcMain.handle(IPC_CHANNELS.characterDelete, async (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('无效的角色标识。');
+    const current = await characterService.findCurrent();
+    const deleted = await characterService.delete(id as Character['id']);
+    if (!deleted) throw new Error('角色不存在或无法删除。');
+    if (current?.id === id) {
+      const remaining = await characterService.list();
+      const next = remaining[0];
+      if (next) await characterService.activate(next.id);
+    }
+  });
   ipcMain.handle(IPC_CHANNELS.characterLoreGenerate, async (_event, input: unknown) => {
     const draft = CharacterDraftSchema.parse(input);
     const profile = await modelProfileRepository.get();

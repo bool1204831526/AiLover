@@ -129,6 +129,51 @@ export class SqliteCharacterRepository implements CharacterRepository {
     return this.find(and(eq(characters.userId, LOCAL_USER_ID), eq(characters.status, 'active')));
   }
 
+  public async list(): Promise<Character[]> {
+    const rows = this.database.orm.select().from(characters)
+      .innerJoin(personalityBaselines, eq(characters.id, personalityBaselines.characterId))
+      .innerJoin(characterLore, eq(characters.id, characterLore.characterId))
+      .where(eq(characters.userId, LOCAL_USER_ID)).all();
+    return rows.map((row) => this.toCharacter(row));
+  }
+
+  public async activate(id: CharacterId): Promise<boolean> {
+    const changed = this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare("UPDATE characters SET status = 'archived' WHERE user_id = ? AND status = 'active'")
+        .run(LOCAL_USER_ID);
+      return this.database.sqlite.prepare("UPDATE characters SET status = 'active', updated_at = ? WHERE id = ? AND user_id = ?")
+        .run(new Date().toISOString(), id, LOCAL_USER_ID).changes;
+    })();
+    return changed > 0;
+  }
+
+  public async delete(id: CharacterId): Promise<boolean> {
+    const exists = this.database.sqlite.prepare('SELECT 1 FROM characters WHERE id = ? AND user_id = ?').get(id, LOCAL_USER_ID);
+    if (!exists) return false;
+    this.database.sqlite.pragma('foreign_keys = OFF');
+    try {
+      this.database.sqlite.transaction(() => {
+        const conversationIds = (this.database.sqlite.prepare('SELECT id FROM conversations WHERE character_id = ?').all(id) as { id: string }[]).map(({ id: conversationId }) => conversationId);
+        for (const conversationId of conversationIds) this.database.sqlite.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
+        this.database.sqlite.prepare('DELETE FROM memory_sources WHERE memory_id IN (SELECT id FROM memories WHERE character_id = ?)').run(id);
+        this.database.sqlite.prepare('DELETE FROM memory_links WHERE from_memory_id IN (SELECT id FROM memories WHERE character_id = ?) OR to_memory_id IN (SELECT id FROM memories WHERE character_id = ?)').run(id, id);
+        this.database.sqlite.prepare('DELETE FROM memory_recalls WHERE memory_id IN (SELECT id FROM memories WHERE character_id = ?)').run(id);
+        this.database.sqlite.prepare('DELETE FROM episode_sources WHERE episode_id IN (SELECT id FROM episodic_memories WHERE character_id = ?)').run(id);
+        this.database.sqlite.prepare('DELETE FROM episode_recalls WHERE episode_id IN (SELECT id FROM episodic_memories WHERE character_id = ?)').run(id);
+        this.database.sqlite.prepare('DELETE FROM consolidated_memory_sources WHERE consolidated_memory_id IN (SELECT id FROM consolidated_memories WHERE character_id = ?)').run(id);
+        for (const table of [
+          'personality_evidence', 'emotion_states', 'relationship_states', 'personality_states', 'reflections',
+          'character_visual_identities', 'assets', 'future_intentions',
+          'consolidated_memories', 'self_model_entries', 'memory_deletions', 'memory_resolutions', 'character_lore',
+          'episodic_memories', 'memories', 'conversations', 'personality_baselines']) {
+          this.database.sqlite.prepare(`DELETE FROM ${table} WHERE character_id = ?`).run(id);
+        }
+        this.database.sqlite.prepare('DELETE FROM characters WHERE id = ? AND user_id = ?').run(id, LOCAL_USER_ID);
+      })();
+    } finally { this.database.sqlite.pragma('foreign_keys = ON'); }
+    return true;
+  }
+
   public async updateLore(id: CharacterId, lore: Character['lore'], updatedAt: Date): Promise<boolean> {
     const result = this.database.orm.update(characterLore).set({ ...lore, source: 'user',
       updatedAt: updatedAt.toISOString() }).where(eq(characterLore.characterId, id)).run();
@@ -143,6 +188,10 @@ export class SqliteCharacterRepository implements CharacterRepository {
       .innerJoin(characterLore, eq(characters.id, characterLore.characterId))
       .where(condition).limit(1).get();
     if (!row) return null;
+    return this.toCharacter(row);
+  }
+
+  private toCharacter(row: { characters: typeof characters.$inferSelect; personality_baselines: typeof personalityBaselines.$inferSelect; character_lore: typeof characterLore.$inferSelect }): Character {
     const profile = row.characters;
     const baseline = row.personality_baselines;
     const lore = row.character_lore;
