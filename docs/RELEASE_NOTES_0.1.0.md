@@ -68,6 +68,7 @@
 # Memory Center corrections
 
 - Added traceable local correction and soft-delete operations for memory records.
+- Scoped every memory correction and deletion to the current character and preserved immutable source evidence.
 
 # Consolidated memory persistence
 

@@ -260,7 +260,8 @@ describe('SqliteMemoryRepository', () => {
     await conversations.saveMessage({ id: 'query-message', conversationId: 'conversation-memory',
       role: 'user', content: '手冲咖啡', status: 'completed', model: null,
       createdAt: new Date('2026-09-11T00:00:00Z') });
-    const service = new MemoryService({ repository: new SqliteMemoryRepository(database),
+    const memoryRepository = new SqliteMemoryRepository(database);
+    const service = new MemoryService({ repository: memoryRepository,
       idGenerator: { next: () => 'memory-fts' } });
     await service.capture({ userId: 'local-user', characterId: character.id,
       messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
@@ -275,6 +276,12 @@ describe('SqliteMemoryRepository', () => {
       .toEqual({ reinforcement_count: 1 });
     expect(database.sqlite.prepare('SELECT query_message_id FROM memory_recalls').get())
       .toEqual({ query_message_id: 'query-message' });
+    expect(await memoryRepository.correct('another-character', 'memory-fts', '错误修改', 1, new Date())).toBe(false);
+    expect(await memoryRepository.correct(character.id, 'memory-fts', '我更喜欢拿铁', 0.7, new Date())).toBe(true);
+    expect(database.sqlite.prepare('SELECT content FROM memories WHERE id = ?').get('memory-fts'))
+      .toEqual({ content: '我更喜欢拿铁' });
+    expect(await memoryRepository.softDelete('another-character', 'memory-fts')).toBe(false);
+    expect(await memoryRepository.softDelete(character.id, 'memory-fts')).toBe(true);
     database.close();
   });
 });

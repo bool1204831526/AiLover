@@ -483,14 +483,17 @@ export class SqliteMemoryRepository implements MemoryRepository {
       .run(strength, state, id);
   }
 
-  public async correct(id: string, content: string, importance: number, at: Date): Promise<void> {
-    this.database.sqlite.prepare(`UPDATE memories SET content = ?, evidence = ?, importance = ?, last_seen_at = ? WHERE id = ?`)
-      .run(content, content, Math.max(0, Math.min(1, importance)), at.toISOString(), id);
+  public async correct(characterId: string, id: string, content: string, importance: number, at: Date): Promise<boolean> {
+    const result = this.database.sqlite.prepare(`UPDATE memories SET content = ?, importance = ?, last_seen_at = ?
+      WHERE id = ? AND character_id = ?`).run(content, Math.max(0, Math.min(1, importance)),
+      at.toISOString(), id, characterId);
+    return result.changes > 0;
   }
 
-  public async softDelete(id: string): Promise<void> {
-    this.database.sqlite.prepare("UPDATE memories SET state = 'expired', recall_strength = 0 WHERE id = ?")
-      .run(id);
+  public async softDelete(characterId: string, id: string): Promise<boolean> {
+    const result = this.database.sqlite.prepare(`UPDATE memories SET state = 'expired', recall_strength = 0
+      WHERE id = ? AND character_id = ?`).run(id, characterId);
+    return result.changes > 0;
   }
 
   private insertSource(memoryId: string, messageId: string, evidence: string, at: Date): boolean {
