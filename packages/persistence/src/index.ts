@@ -15,7 +15,7 @@ import type {
 } from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { EpisodeSource, EpisodicMemoryRepository, MemoryRepository, MemoryType,
-  StoredEpisode, StoredMemory } from '@ailover/memory';
+  FutureIntention, StoredEpisode, StoredMemory } from '@ailover/memory';
 import type { CompanionSettings } from '@ailover/contracts';
 
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
@@ -499,6 +499,40 @@ export class SqliteMemoryRepository implements MemoryRepository {
       .run(memoryId, messageId, evidence, at.toISOString());
     return result.changes > 0;
   }
+}
+
+export class SqliteFutureIntentionRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async save(characterId: string, intention: FutureIntention): Promise<void> {
+    this.database.sqlite.prepare(`INSERT OR REPLACE INTO future_intentions(
+      id, character_id, description, trigger_type, trigger_data, priority, source_memory_ids,
+      status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(intention.id, characterId, intention.description, intention.triggerType,
+        JSON.stringify(intention.triggerData), intention.priority, JSON.stringify(intention.sourceMemoryIds),
+        intention.status, intention.createdAt.toISOString(), intention.expiresAt?.toISOString() ?? null);
+  }
+
+  public async listPending(characterId: string, now: Date): Promise<FutureIntention[]> {
+    const rows = this.database.sqlite.prepare(`SELECT * FROM future_intentions
+      WHERE character_id = ? AND status = 'pending' AND (expires_at IS NULL OR expires_at > ?)
+      ORDER BY priority DESC`).all(characterId, now.toISOString()) as FutureIntentionRow[];
+    return rows.map(toFutureIntention);
+  }
+
+  public async updateStatus(id: string, status: FutureIntention['status']): Promise<void> {
+    this.database.sqlite.prepare('UPDATE future_intentions SET status = ? WHERE id = ?').run(status, id);
+  }
+}
+
+type FutureIntentionRow = { id: string; description: string; trigger_type: string; trigger_data: string;
+  priority: number; source_memory_ids: string; status: string; created_at: string; expires_at: string | null };
+
+function toFutureIntention(row: FutureIntentionRow): FutureIntention {
+  return { id: row.id, description: row.description, triggerType: row.trigger_type as FutureIntention['triggerType'],
+    triggerData: JSON.parse(row.trigger_data) as FutureIntention['triggerData'], priority: row.priority,
+    sourceMemoryIds: JSON.parse(row.source_memory_ids) as string[], status: row.status as FutureIntention['status'],
+    createdAt: new Date(row.created_at), expiresAt: row.expires_at ? new Date(row.expires_at) : null };
 }
 
 type EpisodeRow = {

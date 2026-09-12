@@ -7,12 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
 import { CognitionService } from '@ailover/cognition';
-import { EpisodicMemoryService, MemoryService } from '@ailover/memory';
+import { EpisodicMemoryService, MemoryService, type FutureIntention } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
   SqliteEpisodicMemoryRepository,
+  SqliteFutureIntentionRepository,
   SqliteCompanionSettingsRepository,
   SqliteDesktopPetWindowStateRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
@@ -316,5 +317,20 @@ describe('SqliteCognitionRepository', () => {
     expect(second.sqlite.prepare('SELECT trigger_message_id FROM reflections').get())
       .toEqual({ trigger_message_id: 'cognition-message' });
     second.close();
+  });
+
+  it('persists pending future intentions and updates their status', async () => {
+    const path = join(tmpdir(), `ailover-intentions-${randomUUID()}.sqlite`);
+    const database = openAppDatabase(path);
+    const repository = new SqliteFutureIntentionRepository(database);
+    const intention: FutureIntention = { id: 'intention-1', description: '下次关心面试结果',
+      triggerType: 'return', triggerData: { keywords: ['面试'] }, priority: 0.8,
+      sourceMemoryIds: ['memory-1'], status: 'pending', createdAt: new Date('2026-09-12'), expiresAt: new Date('2026-09-20') };
+    await repository.save('character-1', intention);
+    expect((await repository.listPending('character-1', new Date('2026-09-13')))[0]?.description)
+      .toBe('下次关心面试结果');
+    await repository.updateStatus('intention-1', 'triggered');
+    expect(await repository.listPending('character-1', new Date('2026-09-13'))).toHaveLength(0);
+    database.close();
   });
 });
