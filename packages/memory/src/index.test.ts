@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  advanceFutureIntentions, buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -85,6 +85,17 @@ describe('memory candidate extraction', () => {
     expect(result[0]?.confidence).toBeLessThan(0.92);
     expect(result[0]?.evidence).toContain('隐含表达');
   });
+});
+
+it('builds a bounded memory center view without superseded entries', () => {
+  const make = (id: string, state: StoredMemory['state'], at: string): StoredMemory => ({
+    id, userId: 'local-user', characterId: 'character-1', type: 'preference', subject: '咖啡',
+    content: id, normalizedKey: id, confidence: 0.9, importance: 0.5, emotionalWeight: 0.2,
+    polarity: 'positive', recallStrength: 1, reinforcementCount: 1, state,
+    firstSeenAt: new Date(at), lastSeenAt: new Date(at), lastRecalledAt: null, expiresAt: null, evidence: id,
+  });
+  const result = buildMemoryCenterEntries([make('old', 'active', '2026-09-01'), make('hidden', 'superseded', '2026-09-12'), make('new', 'active', '2026-09-11')], 1);
+  expect(result.map(({ id }) => id)).toEqual(['new']);
 });
 
 describe('MemoryService', () => {

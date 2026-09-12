@@ -25,6 +25,18 @@ export type StoredMemory = MemoryCandidate & {
   lastRecalledAt: Date | null;
 };
 
+export type MemoryCenterEntry = Pick<StoredMemory, 'id' | 'type' | 'subject' | 'content' |
+  'confidence' | 'importance' | 'state' | 'firstSeenAt' | 'lastSeenAt' | 'expiresAt' | 'evidence'>;
+
+export function buildMemoryCenterEntries(memories: StoredMemory[], limit = 100): MemoryCenterEntry[] {
+  return memories.filter((memory) => memory.state !== 'superseded')
+    .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
+    .slice(0, Math.max(0, limit))
+    .map(({ id, type, subject, content, confidence, importance, state, firstSeenAt,
+      lastSeenAt, expiresAt, evidence }) => ({ id, type, subject, content, confidence,
+      importance, state, firstSeenAt, lastSeenAt, expiresAt, evidence }));
+}
+
 export type RecalledMemory = StoredMemory & { score: number };
 
 export interface EmbeddingStore {
