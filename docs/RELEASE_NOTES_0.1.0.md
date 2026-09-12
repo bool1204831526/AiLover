@@ -11,6 +11,7 @@
 - Evidence-backed episodic memory for significant shared experiences, with bounded recall and audit history.
 - Implicit preference extraction for expressions such as “最近越来越离不开拿铁了”, marked with lower confidence.
 - Local consolidation of repeated compatible experiences into source-traceable long-term insights.
+- Bounded self-model projections for the companion's current facts, beliefs and values.
 - Bounded emotion, relationship and personality evolution with traceable source messages.
 - Scenario-aware personality projection that turns current traits into private, natural-language behavior guidance.
 - Natural-language relationship summary without exposing internal scores.

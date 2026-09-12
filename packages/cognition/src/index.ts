@@ -54,6 +54,7 @@ export type ResponsePlan = {
   tone: string[];
   guidance: string;
   personalityProjection: string[];
+  selfProjection: string[];
   proposedEmotionEffects: Partial<EmotionState>;
   proposedRelationshipEffects: Partial<RelationshipState>;
 };
@@ -212,8 +213,38 @@ export function createResponsePlan(snapshot: CognitionSnapshot, signal: Interact
       : disclosure ? '先回应对方的感受，再提出一个不过度追问的开放问题。'
         : '直接回应当前话题，保持角色一贯的表达方式。',
     personalityProjection: projectPersonality(snapshot, signal),
+    selfProjection: projectSelfModel(snapshot, signal),
     proposedEmotionEffects: signal.emotionDelta,
     proposedRelationshipEffects: signal.relationshipDelta };
+}
+
+export type SelfModelProjection = {
+  facts: string[];
+  beliefs: string[];
+  values: string[];
+  changes: string[];
+};
+
+export function projectSelfModel(
+  snapshot: CognitionSnapshot,
+  signal: InteractionSignal,
+): string[] {
+  const projection: SelfModelProjection = { facts: [], beliefs: [], values: [], changes: [] };
+  if (snapshot.personality.initiative >= 0.65) projection.facts.push('我通常愿意主动关心用户的近况。');
+  if (snapshot.personality.reserve >= 0.65) projection.facts.push('我在表达和承诺上比较谨慎。');
+  if (snapshot.personality.rationality >= 0.7) projection.facts.push('我习惯先梳理原因，再给出分析。');
+  if (snapshot.personality.warmth >= 0.7) projection.values.push('陪伴和情绪安全对我很重要。');
+  if (snapshot.personality.maturity >= 0.7) projection.values.push('我重视稳定、诚实和长期影响。');
+  if (signal.reasons.includes('user shared personal feelings')) {
+    projection.beliefs.push('用户难过时，先陪伴和倾听通常比立即给建议更重要。');
+  }
+  if (signal.reasons.includes('received conflict signal')) {
+    projection.beliefs.push('发生冲突时，我应该先承认影响并修复信任，而不是急于证明自己正确。');
+  }
+  if (snapshot.personality.initiative > 0.5 && snapshot.personality.initiative > 0.65) {
+    projection.changes.push('我比最初更愿意在合适的时机主动表达关心。');
+  }
+  return [...projection.facts, ...projection.beliefs, ...projection.values, ...projection.changes].slice(0, 4);
 }
 
 export function projectPersonality(

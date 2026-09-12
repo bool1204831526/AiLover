@@ -17,7 +17,7 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 2. Episodic Memory: completed; detect, persist and recall significant shared experiences.
 3. Semantic Extraction: in progress; deterministic implicit-preference candidates now use lower confidence, with validated structured model candidates still planned.
 4. Memory Consolidation: in progress; repeated compatible episodes now produce traceable local insights.
-5. Self Model: add facts, preferences, beliefs, values, experiences and change history about the AI.
+5. Self Model: in progress; bounded local facts, beliefs, values and change projections now guide replies.
 6. Personality Evidence: connect experiences and feedback to explainable long-term trait evolution.
 7. Relationship Timeline: surface durable relationship milestones from episodes.
 8. Emotional Association: let relevant past experiences influence current bounded emotion.

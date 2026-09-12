@@ -4,7 +4,7 @@ import type { PersonalityValues } from '@ailover/domain';
 
 import {
   analyzeInteraction, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
-  createResponsePlan, projectPersonality, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
+  createResponsePlan, projectPersonality, projectSelfModel, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
   type ReflectionRecord,
 } from './index';
 
@@ -111,6 +111,16 @@ describe('cognition rules', () => {
     );
     expect(plan.personalityProjection.join(' ')).toContain('主动延伸话题');
     expect(plan.personalityProjection.length).toBeLessThanOrEqual(6);
+    expect(plan.selfProjection.length).toBeLessThanOrEqual(4);
+  });
+
+  it('projects a bounded self model without exposing internal scores', () => {
+    const snapshot = currentSnapshot({ ...baseline, initiative: 0.8, rationality: 0.85, warmth: 0.9 });
+    const projection = projectSelfModel(snapshot, analyzeInteraction('其实我很难过，只告诉你一个秘密'));
+    expect(projection.join(' ')).toContain('主动关心');
+    expect(projection.join(' ')).toContain('先陪伴和倾听');
+    expect(projection.join(' ')).not.toMatch(/initiative|0\.\d/);
+    expect(projection.length).toBeLessThanOrEqual(4);
   });
 
   it('creates a constrained response plan and reflection for meaningful disclosure', async () => {
