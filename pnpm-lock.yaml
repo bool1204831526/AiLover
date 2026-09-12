@@ -136,7 +136,11 @@ importers:
 
   packages/domain: {}
 
-  packages/memory: {}
+  packages/memory:
+    dependencies:
+      zod:
+        specifier: ^4.1.5
+        version: 4.5.4
 
   packages/model-gateway: {}
 

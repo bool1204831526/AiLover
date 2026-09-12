@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, correctMemory, intentionsFromMemories, markMemoryDeleted, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  advanceFutureIntentions, buildMemoryCenterEntries, buildRelationshipTimeline, consolidateEpisodes, correctMemory, intentionsFromMemories, markMemoryDeleted, MemoryService, validateStructuredMemoryProposals, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -84,6 +84,28 @@ describe('memory candidate extraction', () => {
     expect(result[0]?.subject).toBe('拿铁');
     expect(result[0]?.confidence).toBeLessThan(0.92);
     expect(result[0]?.evidence).toContain('隐含表达');
+  });
+
+  it('accepts only evidence-backed structured proposals', () => {
+    const source = '工作忙的时候我一般不喝咖啡。我准备年底去杭州住一阵。';
+    const proposals = validateStructuredMemoryProposals([{ type: 'preference', subject: '工作忙时喝咖啡',
+      polarity: 'negative', confidence: 0.82, importance: 0.65, emotionalWeight: 0.2,
+      evidenceQuote: '工作忙的时候我一般不喝咖啡' }, { type: 'semantic', subject: '虚构',
+      polarity: 'neutral', confidence: 0.99, importance: 0.9, emotionalWeight: 0.2,
+      evidenceQuote: '用户住在北京' }], source, now);
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]?.content).toBe('工作忙的时候我一般不喝咖啡');
+    expect(proposals[0]?.confidence).toBeLessThanOrEqual(0.9);
+  });
+
+  it('rejects hypothetical, question and low-confidence proposals', () => {
+    const source = '如果我去杭州会怎样？我可能喜欢拿铁。';
+    const common = { type: 'semantic', subject: '地点', polarity: 'neutral', importance: 0.5, emotionalWeight: 0.2 } as const;
+    expect(validateStructuredMemoryProposals([
+      { ...common, confidence: 0.9, evidenceQuote: '如果我去杭州会怎样？' },
+      { ...common, confidence: 0.9, evidenceQuote: '我可能喜欢拿铁' },
+      { ...common, confidence: 0.5, evidenceQuote: '我可能喜欢拿铁。' },
+    ], source, now)).toEqual([]);
   });
 });
 

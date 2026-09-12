@@ -15,7 +15,7 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 
 1. Personality Projection: completed; traits become scenario-aware behavior guidance and response strategy.
 2. Episodic Memory: completed; detect, persist and recall significant shared experiences.
-3. Semantic Extraction: in progress; deterministic implicit-preference candidates now use lower confidence, with validated structured model candidates still planned.
+3. Semantic Extraction: in progress; deterministic implicit-preference candidates use lower confidence, and a strict evidence-backed validation boundary now guards structured model proposals before model transport is connected.
 4. Memory Consolidation: completed; repeated compatible episodes automatically form, persist, reinforce and cautiously guide later replies.
 5. Self Model: completed; categorized, evidence-linked and versioned self knowledge persists across restarts and guides replies.
 6. Personality Evidence: completed; evidence can be grouped and inspected with recent source explanations.

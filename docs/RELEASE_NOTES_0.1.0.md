@@ -10,6 +10,8 @@
 - Evidence-backed memory for preferences, plans and important interactions.
 - Evidence-backed episodic memory for significant shared experiences, with bounded recall and audit history.
 - Implicit preference extraction for expressions such as “最近越来越离不开拿铁了”, marked with lower confidence.
+- Strict local validation for structured memory proposals, including exact source evidence, confidence,
+  uncertainty, expiry and candidate-count limits.
 - Local consolidation of repeated compatible experiences into source-traceable long-term insights.
 - Bounded self-model projections for the companion's current facts, beliefs and values.
 - Expiry-aware future-intention candidates derived from active user plans.
@@ -88,3 +90,9 @@
 # Relationship timeline
 
 - Added a chronological relationship view for important evidence-backed Episode milestones.
+
+# Structured memory validation
+
+- Added a strict schema and local trust boundary for model-proposed semantic, preference, plan and relationship memories.
+- Rejected fabricated, hypothetical, question-shaped and low-confidence evidence before persistence.
+- Kept normalized keys, stored content and plan expiry policy under deterministic local control.

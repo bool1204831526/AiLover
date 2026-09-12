@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type MemoryType = 'semantic' | 'preference' | 'plan' | 'episodic' | 'relationship';
 
 export type MemoryCandidate = {
@@ -167,6 +169,42 @@ export function extractMemoryCandidates(text: string, now: Date): MemoryCandidat
     if (identity?.[1]) results.push(candidate('semantic', '用户姓名', sentence, 'neutral', now));
   }
   return deduplicate(results);
+}
+
+const StructuredMemoryProposalSchema = z.object({
+  type: z.enum(['semantic', 'preference', 'plan', 'relationship']),
+  subject: z.string().trim().min(1).max(80),
+  polarity: z.enum(['positive', 'negative', 'neutral']),
+  confidence: z.number().min(0).max(1), importance: z.number().min(0).max(1),
+  emotionalWeight: z.number().min(0).max(1), evidenceQuote: z.string().trim().min(1).max(500),
+  expiresAt: z.iso.datetime().nullable().optional(),
+});
+const StructuredMemoryProposalsSchema = z.array(StructuredMemoryProposalSchema).max(6);
+
+export function validateStructuredMemoryProposals(
+  proposals: unknown,
+  sourceText: string,
+  now: Date,
+): MemoryCandidate[] {
+  const parsed = StructuredMemoryProposalsSchema.safeParse(proposals);
+  if (!parsed.success) return [];
+  return deduplicate(parsed.data.flatMap((proposal) => {
+    const evidence = proposal.evidenceQuote.trim();
+    if (!sourceText.includes(evidence) || proposal.confidence < 0.7) return [];
+    if (/(如果|假如|也许|可能|大概|或许|说不定|听说)/.test(evidence) || /[吗？?]$/.test(evidence)) return [];
+    let expiresAt: Date | null = null;
+    if (proposal.type === 'plan') {
+      const proposedExpiry = proposal.expiresAt ? new Date(proposal.expiresAt) : null;
+      const maximum = new Date(now.getTime() + 366 * 86_400_000);
+      expiresAt = proposedExpiry && proposedExpiry > now && proposedExpiry <= maximum
+        ? proposedExpiry : new Date(now.getTime() + 14 * 86_400_000);
+    }
+    return [{ type: proposal.type, subject: proposal.subject, content: evidence,
+      normalizedKey: `${proposal.type}:${normalize(proposal.subject)}`,
+      confidence: Math.min(0.9, proposal.confidence), importance: proposal.importance,
+      emotionalWeight: proposal.emotionalWeight, polarity: proposal.polarity,
+      expiresAt, evidence: `结构化提取：${evidence}` }];
+  }));
 }
 
 export function inferMemoryTypes(query: string): MemoryType[] {
