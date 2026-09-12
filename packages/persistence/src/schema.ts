@@ -98,6 +98,22 @@ export const memories = sqliteTable('memories', {
   expiresAt: text('expires_at'),
 });
 
+export const episodicMemories = sqliteTable('episodic_memories', {
+  id: text('id').primaryKey(),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id),
+  kind: text('kind').notNull(), fingerprint: text('fingerprint').notNull(),
+  title: text('title').notNull(), summary: text('summary').notNull(), context: text('context'),
+  participants: text('participants').notNull(), userAction: text('user_action').notNull(),
+  aiAction: text('ai_action'), userEmotion: text('user_emotion'), aiEmotion: text('ai_emotion'),
+  relationshipRelevance: real('relationship_relevance').notNull(),
+  emotionalWeight: real('emotional_weight').notNull(), importance: real('importance').notNull(),
+  confidence: real('confidence').notNull(), reinforcementCount: integer('reinforcement_count').notNull(),
+  status: text('status').notNull(), relatedMemoryIds: text('related_memory_ids').notNull(),
+  tags: text('tags').notNull(), eventTime: text('event_time').notNull(),
+  createdAt: text('created_at').notNull(), lastRecalledAt: text('last_recalled_at'),
+});
+
 export const emotionStates = sqliteTable('emotion_states', {
   id: text('id').primaryKey(),
   characterId: text('character_id').notNull().references(() => characters.id),

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  decayedStrength, extractMemoryCandidates, MemoryService, type MemoryRepository,
-  type MemoryType, type StoredMemory,
+  decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
+  MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
 class InMemoryRepository implements MemoryRepository {
@@ -36,6 +37,28 @@ class InMemoryRepository implements MemoryRepository {
     const memory = this.memories.find((item) => item.id === id);
     if (memory) { memory.recallStrength = strength; memory.state = state; }
   }
+}
+
+class InMemoryEpisodeRepository implements EpisodicMemoryRepository {
+  public episodes: StoredEpisode[] = [];
+  public recalls: string[] = [];
+  async findByFingerprint(characterId: string, fingerprint: string) {
+    return this.episodes.find((item) => item.characterId === characterId &&
+      item.fingerprint === fingerprint) ?? null;
+  }
+  async save(episode: StoredEpisode) { this.episodes.push(episode); }
+  async reinforce(id: string, sources: EpisodeSource[], relatedMemoryIds: string[]) {
+    const episode = this.episodes.find((item) => item.id === id);
+    if (!episode) return;
+    episode.reinforcementCount += 1;
+    episode.sourceMessageIds = [...new Set([...episode.sourceMessageIds,
+      ...sources.map(({ messageId }) => messageId)])];
+    episode.relatedMemoryIds = [...new Set([...episode.relatedMemoryIds, ...relatedMemoryIds])];
+  }
+  async searchCandidates(_characterId: string, _query: string, _includeRecent: boolean, limit: number) {
+    return this.episodes.slice(0, limit);
+  }
+  async recordRecall(id: string) { this.recalls.push(id); }
 }
 
 describe('memory candidate extraction', () => {
@@ -118,5 +141,46 @@ describe('MemoryService', () => {
     await service.decay('character-1', now);
     expect(repository.memories.find(({ type }) => type === 'plan')?.state).toBe('expired');
     expect(repository.memories.find(({ type }) => type === 'relationship')?.state).toBe('active');
+  });
+});
+
+describe('EpisodicMemoryService', () => {
+  const base = { characterId: 'character-1', characterName: '艾琳',
+    conversationId: 'conversation-1', userMessageId: 'message-1', now: new Date('2026-09-11T00:00:00Z') };
+
+  it('rejects ordinary chat and recognizes high-value shared experiences', () => {
+    expect(extractEpisodeCandidate({ ...base, userText: '今天天气不错' })).toBeNull();
+    const episode = extractEpisodeCandidate({ ...base,
+      userText: '我们之前一起准备了很久，今天终于完成面试了', aiText: '你真的做到了。' });
+    expect(episode?.kind).toBe('shared-achievement');
+    expect(episode?.importance).toBeGreaterThanOrEqual(0.65);
+    expect(episode?.summary).toContain('你真的做到了');
+  });
+
+  it('captures the first conversation and reinforces duplicate evidence', async () => {
+    const repository = new InMemoryEpisodeRepository();
+    let id = 0;
+    const service = new EpisodicMemoryService({ repository,
+      idGenerator: { next: () => `episode-${++id}` } });
+    await service.capture({ ...base, userText: '你好', isFirstConversationTurn: true });
+    await service.capture({ ...base, userMessageId: 'message-2', userText: '你好',
+      isFirstConversationTurn: true });
+    expect(repository.episodes).toHaveLength(1);
+    expect(repository.episodes[0]?.reinforcementCount).toBe(2);
+    expect(repository.episodes[0]?.sourceMessageIds).toContain('message-2');
+  });
+
+  it('recalls at most three episodes and audits their use', async () => {
+    const repository = new InMemoryEpisodeRepository();
+    const service = new EpisodicMemoryService({ repository,
+      idGenerator: { next: () => crypto.randomUUID() } });
+    for (let index = 0; index < 5; index += 1) {
+      await service.capture({ ...base, userMessageId: `message-${index}`,
+        userText: `这是我们第一次一起完成项目 ${index}` });
+    }
+    const recalled = await service.recall({ characterId: 'character-1', queryMessageId: 'query-1',
+      query: '还记得我们第一次一起完成项目吗', now: new Date('2026-09-12T00:00:00Z') });
+    expect(recalled).toHaveLength(3);
+    expect(repository.recalls).toHaveLength(3);
   });
 });

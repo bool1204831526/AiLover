@@ -14,7 +14,8 @@ import type {
   CognitionRepository, CognitionSnapshot, EvolutionEvidence, ReflectionRecord,
 } from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
-import type { MemoryRepository, MemoryType, StoredMemory } from '@ailover/memory';
+import type { EpisodeSource, EpisodicMemoryRepository, MemoryRepository, MemoryType,
+  StoredEpisode, StoredMemory } from '@ailover/memory';
 import type { CompanionSettings } from '@ailover/contracts';
 
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
@@ -490,6 +491,118 @@ export class SqliteMemoryRepository implements MemoryRepository {
   }
 }
 
+type EpisodeRow = {
+  id: string; character_id: string; conversation_id: string; kind: string; fingerprint: string;
+  title: string; summary: string; context: string | null; participants: string;
+  user_action: string; ai_action: string | null; user_emotion: string | null; ai_emotion: string | null;
+  relationship_relevance: number; emotional_weight: number; importance: number; confidence: number;
+  reinforcement_count: number; status: string; related_memory_ids: string; tags: string;
+  event_time: string; created_at: string; last_recalled_at: string | null;
+};
+
+export class SqliteEpisodicMemoryRepository implements EpisodicMemoryRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async findByFingerprint(characterId: string, fingerprint: string): Promise<StoredEpisode | null> {
+    const row = this.database.sqlite.prepare(`SELECT * FROM episodic_memories
+      WHERE character_id = ? AND fingerprint = ? AND status IN ('active', 'faded') LIMIT 1`)
+      .get(characterId, fingerprint) as EpisodeRow | undefined;
+    return row ? this.toEpisode(row) : null;
+  }
+
+  public async save(episode: StoredEpisode, sources: EpisodeSource[]): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare(`INSERT INTO episodic_memories(id, character_id, conversation_id,
+        kind, fingerprint, title, summary, context, participants, user_action, ai_action,
+        user_emotion, ai_emotion, relationship_relevance, emotional_weight, importance, confidence,
+        reinforcement_count, status, related_memory_ids, tags, event_time, created_at, last_recalled_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(episode.id, episode.characterId, episode.conversationId, episode.kind,
+          episode.fingerprint, episode.title, episode.summary, episode.context,
+          JSON.stringify(episode.participants), episode.userAction, episode.aiAction,
+          episode.userEmotion, episode.aiEmotion, episode.relationshipRelevance,
+          episode.emotionalWeight, episode.importance, episode.confidence,
+          episode.reinforcementCount, episode.status, JSON.stringify(episode.relatedMemoryIds),
+          JSON.stringify(episode.tags), episode.eventTime.toISOString(), episode.createdAt.toISOString(),
+          episode.lastRecalledAt?.toISOString() ?? null);
+      this.insertSources(episode.id, sources, episode.createdAt);
+    })();
+  }
+
+  public async reinforce(id: string, sources: EpisodeSource[], relatedMemoryIds: string[]): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      const row = this.database.sqlite.prepare('SELECT related_memory_ids FROM episodic_memories WHERE id = ?')
+        .get(id) as { related_memory_ids: string } | undefined;
+      if (!row) return;
+      const inserted = this.insertSources(id, sources, new Date());
+      const related = [...new Set([...parseStringArray(row.related_memory_ids), ...relatedMemoryIds])];
+      this.database.sqlite.prepare(`UPDATE episodic_memories SET
+        reinforcement_count = reinforcement_count + ?, related_memory_ids = ?, status = 'active'
+        WHERE id = ?`).run(inserted ? 1 : 0, JSON.stringify(related), id);
+    })();
+  }
+
+  public async searchCandidates(
+    characterId: string,
+    query: string,
+    includeRecent: boolean,
+    limit: number,
+  ): Promise<StoredEpisode[]> {
+    const found = new Map<string, EpisodeRow>();
+    const ftsQuery = toFtsQuery(query);
+    if (ftsQuery) {
+      const rows = this.database.sqlite.prepare(`SELECT episodic_memories.* FROM episodic_memories
+        JOIN episodes_fts ON episodes_fts.episode_id = episodic_memories.id
+        WHERE character_id = ? AND status IN ('active', 'faded') AND episodes_fts MATCH ?
+        LIMIT ?`).all(characterId, ftsQuery, limit) as EpisodeRow[];
+      for (const row of rows) found.set(row.id, row);
+    }
+    if (includeRecent) {
+      const rows = this.database.sqlite.prepare(`SELECT * FROM episodic_memories
+        WHERE character_id = ? AND status IN ('active', 'faded')
+        ORDER BY importance DESC, event_time DESC LIMIT ?`).all(characterId, limit) as EpisodeRow[];
+      for (const row of rows) found.set(row.id, row);
+    }
+    return [...found.values()].slice(0, limit).map((row) => this.toEpisode(row));
+  }
+
+  public async recordRecall(episodeId: string, queryMessageId: string, score: number, at: Date): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      this.database.sqlite.prepare('UPDATE episodic_memories SET last_recalled_at = ? WHERE id = ?')
+        .run(at.toISOString(), episodeId);
+      this.database.sqlite.prepare(`INSERT INTO episode_recalls(
+        episode_id, query_message_id, score, recalled_at) VALUES (?, ?, ?, ?)`)
+        .run(episodeId, queryMessageId, score, at.toISOString());
+    })();
+  }
+
+  private insertSources(episodeId: string, sources: EpisodeSource[], at: Date): boolean {
+    const insert = this.database.sqlite.prepare(`INSERT OR IGNORE INTO episode_sources(
+      episode_id, message_id, role, created_at) VALUES (?, ?, ?, ?)`);
+    return sources.reduce((changed, source) => insert.run(
+      episodeId, source.messageId, source.role, at.toISOString(),
+    ).changes > 0 || changed, false);
+  }
+
+  private toEpisode(row: EpisodeRow): StoredEpisode {
+    const sources = this.database.sqlite.prepare(`SELECT message_id FROM episode_sources
+      WHERE episode_id = ? ORDER BY created_at,
+      CASE role WHEN 'user' THEN 0 ELSE 1 END, message_id`).all(row.id) as { message_id: string }[];
+    return { id: row.id, characterId: row.character_id, conversationId: row.conversation_id,
+      kind: row.kind as StoredEpisode['kind'], fingerprint: row.fingerprint,
+      title: row.title, summary: row.summary, context: row.context,
+      participants: parseStringArray(row.participants), userAction: row.user_action,
+      aiAction: row.ai_action, userEmotion: row.user_emotion, aiEmotion: row.ai_emotion,
+      relationshipRelevance: row.relationship_relevance, emotionalWeight: row.emotional_weight,
+      importance: row.importance, confidence: row.confidence,
+      reinforcementCount: row.reinforcement_count, status: row.status as StoredEpisode['status'],
+      sourceMessageIds: sources.map(({ message_id }) => message_id),
+      relatedMemoryIds: parseStringArray(row.related_memory_ids), tags: parseStringArray(row.tags),
+      eventTime: new Date(row.event_time), createdAt: new Date(row.created_at),
+      lastRecalledAt: row.last_recalled_at ? new Date(row.last_recalled_at) : null };
+  }
+}
+
 type EmotionRow = { id: string; character_id: string; valence: number; arousal: number;
   security: number; affection: number; reason: string; source_message_id: string | null;
   rule_version: string; recorded_at: string };
@@ -587,7 +700,12 @@ function toFtsQuery(query: string): string {
   return [...new Set(terms)].map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
 }
 
+function parseStringArray(value: string): string[] {
+  const parsed: unknown = JSON.parse(value);
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+}
+
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
-export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories,
+export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories, episodicMemories,
   desktopPetWindowState, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
   relationshipStates, users } from './schema';

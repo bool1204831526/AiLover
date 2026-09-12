@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 const migrations = [{
   version: 1,
@@ -258,6 +258,70 @@ const migrations = [{
       height INTEGER NOT NULL CHECK(height >= 220),
       updated_at TEXT NOT NULL
     );
+  `,
+}, {
+  version: 11,
+  sql: `
+    CREATE TABLE IF NOT EXISTS episodic_memories (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('first', 'shared-achievement', 'strong-emotion',
+        'conflict', 'repair', 'disclosure', 'relationship')),
+      fingerprint TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      context TEXT,
+      participants TEXT NOT NULL,
+      user_action TEXT NOT NULL,
+      ai_action TEXT,
+      user_emotion TEXT,
+      ai_emotion TEXT,
+      relationship_relevance REAL NOT NULL CHECK(relationship_relevance BETWEEN 0 AND 1),
+      emotional_weight REAL NOT NULL CHECK(emotional_weight BETWEEN 0 AND 1),
+      importance REAL NOT NULL CHECK(importance BETWEEN 0 AND 1),
+      confidence REAL NOT NULL CHECK(confidence BETWEEN 0 AND 1),
+      reinforcement_count INTEGER NOT NULL CHECK(reinforcement_count > 0),
+      status TEXT NOT NULL CHECK(status IN ('active', 'faded', 'superseded', 'archived')),
+      related_memory_ids TEXT NOT NULL,
+      tags TEXT NOT NULL,
+      event_time TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_recalled_at TEXT,
+      UNIQUE(character_id, fingerprint)
+    );
+    CREATE INDEX IF NOT EXISTS episodic_memories_rank
+      ON episodic_memories(character_id, status, importance DESC, event_time DESC);
+    CREATE TABLE IF NOT EXISTS episode_sources (
+      episode_id TEXT NOT NULL REFERENCES episodic_memories(id) ON DELETE CASCADE,
+      message_id TEXT NOT NULL REFERENCES messages(id),
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(episode_id, message_id)
+    );
+    CREATE TABLE IF NOT EXISTS episode_recalls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id TEXT NOT NULL REFERENCES episodic_memories(id) ON DELETE CASCADE,
+      query_message_id TEXT NOT NULL REFERENCES messages(id),
+      score REAL NOT NULL,
+      recalled_at TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
+      episode_id UNINDEXED, title, summary, tags, tokenize='trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS episodes_fts_insert AFTER INSERT ON episodic_memories BEGIN
+      INSERT INTO episodes_fts(episode_id, title, summary, tags)
+      VALUES (new.id, new.title, new.summary, new.tags);
+    END;
+    CREATE TRIGGER IF NOT EXISTS episodes_fts_update AFTER UPDATE OF title, summary, tags
+    ON episodic_memories BEGIN
+      DELETE FROM episodes_fts WHERE episode_id = old.id;
+      INSERT INTO episodes_fts(episode_id, title, summary, tags)
+      VALUES (new.id, new.title, new.summary, new.tags);
+    END;
+    CREATE TRIGGER IF NOT EXISTS episodes_fts_delete AFTER DELETE ON episodic_memories BEGIN
+      DELETE FROM episodes_fts WHERE episode_id = old.id;
+    END;
   `,
 }] as const;
 

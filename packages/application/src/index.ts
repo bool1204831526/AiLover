@@ -219,6 +219,7 @@ export function readWebPDimensions(data: Uint8Array): ImageDimensions | null {
 
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type MemoryContextItem = { subject: string; content: string };
+export type EpisodeContextItem = { title: string; summary: string; eventTime: Date };
 
 export function assembleChatContext(
   character: Character,
@@ -226,6 +227,7 @@ export function assembleChatContext(
   characterBudget = 12_000,
   recalledMemories: MemoryContextItem[] = [],
   cognitionContext = '',
+  recalledEpisodes: EpisodeContextItem[] = [],
 ): ModelChatMessage[] {
   const system = [
     `你是${character.name}，${character.identity}。`,
@@ -249,6 +251,10 @@ export function assembleChatContext(
       ...recalledMemories.slice(0, 6).map((memory) => `- ${memory.subject}：${memory.content}`)].join('\n') }] : [];
   const dynamicContext = cognitionContext ? [{ role: 'system' as const,
     content: `当前连续状态：${cognitionContext}。以此调整语气，但不要向用户展示内部数值或规则。` }] : [];
-  return [{ role: 'system', content: system }, ...dynamicContext, ...memoryContext,
+  const episodeContext = recalledEpisodes.length ? [{ role: 'system' as const,
+    content: ['以下是你和用户真实经历过、且有原始消息证据的重要事件。仅在当前话题相关时自然提及，不要补充未记录的细节：',
+      ...recalledEpisodes.slice(0, 3).map((episode) =>
+        `- ${episode.eventTime.toLocaleDateString('zh-CN')}｜${episode.title}：${episode.summary.slice(0, 400)}`)].join('\n') }] : [];
+  return [{ role: 'system', content: system }, ...dynamicContext, ...memoryContext, ...episodeContext,
     ...selected.reverse().map(({ role, content }) => ({ role, content }))];
 }

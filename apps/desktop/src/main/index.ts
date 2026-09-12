@@ -24,13 +24,15 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
-import { MemoryService, type RecalledMemory } from '@ailover/memory';
+import { EpisodicMemoryService, MemoryService, type RecalledEpisode,
+  type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
 import { createLogger } from '@ailover/observability';
 import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
   SqliteMemoryRepository, SqliteModelProfileRepository, SqliteCompanionSettingsRepository,
+  SqliteEpisodicMemoryRepository,
   SqliteDesktopPetWindowStateRepository,
   validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
@@ -70,6 +72,9 @@ const companionSettingsRepository = new SqliteCompanionSettingsRepository(databa
 const desktopPetWindowStateRepository = new SqliteDesktopPetWindowStateRepository(database);
 const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
   idGenerator: { next: randomUUID } });
+const episodicMemoryService = new EpisodicMemoryService({
+  repository: new SqliteEpisodicMemoryRepository(database), idGenerator: { next: randomUUID },
+});
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
@@ -752,7 +757,7 @@ function registerIpcHandlers(): void {
       defaultPath: join(app.getPath('documents'), `AiLover-diagnostics-${new Date().toISOString().slice(0, 10)}.json`),
       filters: [{ name: 'JSON 诊断文件', extensions: ['json'] }] });
     if (destination.canceled || !destination.filePath) return null;
-    const counts = Object.fromEntries(['characters', 'conversations', 'messages', 'memories',
+    const counts = Object.fromEntries(['characters', 'conversations', 'messages', 'memories', 'episodic_memories',
       'emotion_states', 'relationship_states', 'assets'].map((table) => {
       const row = database.sqlite.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
       return [table, row.count];
@@ -770,7 +775,7 @@ function registerIpcHandlers(): void {
         recordCounts: counts },
       configuration: { modelConfigured: Boolean(modelProfile), provider: modelProfile?.provider ?? null },
       privacy: { conversationBodiesIncluded: false, memoryBodiesIncluded: false,
-        credentialsIncluded: false, localPathsIncluded: false },
+        episodeBodiesIncluded: false, credentialsIncluded: false, localPathsIncluded: false },
     };
     await writeFile(destination.filePath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
     return DataOperationResultSchema.parse({ ok: true,
@@ -808,15 +813,28 @@ async function completeChat(
   signal: AbortSignal,
 ): Promise<void> {
   let content = '';
+  let completedSuccessfully = false;
+  let episodeEmotion = '';
+  let relatedMemoryIds: string[] = [];
+  let isFirstConversationTurn = false;
   let completionReaction: DesktopPetRuntimeState = 'review';
   try {
     const history = await conversationRepository.listMessages(assistantMessage.conversationId);
+    isFirstConversationTurn = history.filter(({ role }) => role === 'user').length === 1;
     let recalled: RecalledMemory[] = [];
     try {
       recalled = await memoryService.recall({ characterId: character.id, queryMessageId: userMessage.id,
         query: userMessage.content, now: userMessage.createdAt });
     } catch (error) {
       logger.warn({ error }, 'Memory recall failed; continuing without recalled context');
+    }
+    relatedMemoryIds = recalled.map(({ id }) => id);
+    let recalledEpisodes: RecalledEpisode[] = [];
+    try {
+      recalledEpisodes = await episodicMemoryService.recall({ characterId: character.id,
+        queryMessageId: userMessage.id, query: userMessage.content, now: userMessage.createdAt });
+    } catch (error) {
+      logger.warn({ error }, 'Episode recall failed; continuing without recalled experiences');
     }
     const cognition = await cognitionService.processInteraction({ characterId: character.id,
       baseline: character.personalityBaseline, sourceMessageId: userMessage.id,
@@ -829,12 +847,13 @@ async function completeChat(
     const cognitionContext = [projectCognition(cognition),
       `回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`,
       personalityContext].filter(Boolean).join('\n');
+    episodeEmotion = projectCognition(cognition);
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
     const apiKey = decryptApiKey(profile.encryptedApiKey);
     for await (const delta of streamModelChat({ provider: profile.provider, endpoint: profile.endpoint,
       model: profile.model, messages: assembleChatContext(
-        character, history, 12_000, recalled, cognitionContext,
+        character, history, 12_000, recalled, cognitionContext, recalledEpisodes,
       ), signal,
       ...(apiKey ? { apiKey } : {}) })) {
       if (!content) setDesktopPetActivity('running');
@@ -844,6 +863,7 @@ async function completeChat(
     if (!content.trim()) throw new ModelGatewayError('模型没有返回内容，请重试。', true);
     await conversationRepository.updateMessage(assistantMessage.id,
       { content, status: 'completed', model: profile.model });
+    completedSuccessfully = true;
     const completed = { ...assistantMessage, content, status: 'completed' as const, model: profile.model };
     emitChatEvent({ type: 'completed', requestId, message: toChatMessage(completed) });
     setDesktopPetActivity(completionReaction, 3_000);
@@ -867,6 +887,17 @@ async function completeChat(
         messageId: userMessage.id, text: userMessage.content, now: userMessage.createdAt });
     } catch (error) {
       logger.warn({ error }, 'Memory capture failed');
+    }
+    try {
+      await episodicMemoryService.capture({ characterId: character.id, characterName: character.name,
+        conversationId: assistantMessage.conversationId, userMessageId: userMessage.id,
+        userText: userMessage.content, ...(completedSuccessfully
+          ? { aiMessageId: assistantMessage.id, aiText: content } : {}),
+        ...(episodeEmotion ? { aiEmotion: episodeEmotion } : {}),
+        relatedMemoryIds, isFirstConversationTurn,
+        now: userMessage.createdAt });
+    } catch (error) {
+      logger.warn({ error }, 'Episode capture failed');
     }
     activeChats.delete(requestId);
   }

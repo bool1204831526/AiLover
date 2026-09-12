@@ -204,3 +204,200 @@ function deduplicate(candidates: MemoryCandidate[]): MemoryCandidate[] {
     return true;
   });
 }
+
+export const EPISODE_IMPORTANCE_THRESHOLD = 0.65;
+
+export type EpisodeKind =
+  | 'first' | 'shared-achievement' | 'strong-emotion' | 'conflict'
+  | 'repair' | 'disclosure' | 'relationship';
+
+export type EpisodeSource = { messageId: string; role: 'user' | 'assistant' };
+
+export type EpisodeCandidate = {
+  kind: EpisodeKind;
+  fingerprint: string;
+  title: string;
+  summary: string;
+  context: string | null;
+  participants: string[];
+  userAction: string;
+  aiAction: string | null;
+  userEmotion: string | null;
+  aiEmotion: string | null;
+  relationshipRelevance: number;
+  emotionalWeight: number;
+  importance: number;
+  confidence: number;
+  tags: string[];
+};
+
+export type StoredEpisode = EpisodeCandidate & {
+  id: string;
+  characterId: string;
+  conversationId: string;
+  eventTime: Date;
+  createdAt: Date;
+  reinforcementCount: number;
+  status: 'active' | 'faded' | 'superseded' | 'archived';
+  sourceMessageIds: string[];
+  relatedMemoryIds: string[];
+  lastRecalledAt: Date | null;
+};
+
+export type RecalledEpisode = StoredEpisode & { score: number };
+
+export interface EpisodicMemoryRepository {
+  findByFingerprint(characterId: string, fingerprint: string): Promise<StoredEpisode | null>;
+  save(episode: StoredEpisode, sources: EpisodeSource[]): Promise<void>;
+  reinforce(id: string, sources: EpisodeSource[], relatedMemoryIds: string[]): Promise<void>;
+  searchCandidates(
+    characterId: string,
+    query: string,
+    includeRecent: boolean,
+    limit: number,
+  ): Promise<StoredEpisode[]>;
+  recordRecall(episodeId: string, queryMessageId: string, score: number, at: Date): Promise<void>;
+}
+
+export class EpisodicMemoryService {
+  public constructor(private readonly options: {
+    repository: EpisodicMemoryRepository;
+    idGenerator: { next(): string };
+  }) {}
+
+  public async capture(input: {
+    characterId: string;
+    characterName: string;
+    conversationId: string;
+    userMessageId: string;
+    userText: string;
+    aiMessageId?: string;
+    aiText?: string;
+    aiEmotion?: string;
+    relatedMemoryIds?: string[];
+    isFirstConversationTurn?: boolean;
+    now: Date;
+  }): Promise<StoredEpisode | null> {
+    const candidate = extractEpisodeCandidate(input);
+    if (!candidate || candidate.importance < EPISODE_IMPORTANCE_THRESHOLD) return null;
+    const sources: EpisodeSource[] = [{ messageId: input.userMessageId, role: 'user' }];
+    if (input.aiMessageId && input.aiText?.trim()) {
+      sources.push({ messageId: input.aiMessageId, role: 'assistant' });
+    }
+    const existing = await this.options.repository.findByFingerprint(input.characterId, candidate.fingerprint);
+    if (existing) {
+      await this.options.repository.reinforce(existing.id, sources, input.relatedMemoryIds ?? []);
+      return existing;
+    }
+    const episode: StoredEpisode = { ...candidate, id: this.options.idGenerator.next(),
+      characterId: input.characterId, conversationId: input.conversationId,
+      eventTime: input.now, createdAt: input.now, reinforcementCount: 1,
+      status: 'active', sourceMessageIds: sources.map(({ messageId }) => messageId),
+      relatedMemoryIds: [...new Set(input.relatedMemoryIds ?? [])], lastRecalledAt: null };
+    await this.options.repository.save(episode, sources);
+    return episode;
+  }
+
+  public async recall(input: {
+    characterId: string;
+    queryMessageId: string;
+    query: string;
+    now: Date;
+    limit?: number;
+  }): Promise<RecalledEpisode[]> {
+    const memoryCue = /(记得|以前|之前|那次|第一次|一起|经历|发生过)/.test(input.query);
+    const candidates = await this.options.repository.searchCandidates(
+      input.characterId, input.query, memoryCue, 40,
+    );
+    const ranked = candidates.map((episode) => ({ ...episode,
+      score: scoreEpisode(episode, input.query, input.now, memoryCue) }))
+      .filter(({ score }) => score >= 0.25)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, Math.min(input.limit ?? 3, 3));
+    await Promise.all(ranked.map((episode) => this.options.repository.recordRecall(
+      episode.id, input.queryMessageId, episode.score, input.now,
+    )));
+    return ranked;
+  }
+}
+
+export function extractEpisodeCandidate(input: {
+  characterId: string;
+  characterName: string;
+  userText: string;
+  aiText?: string;
+  aiEmotion?: string;
+  isFirstConversationTurn?: boolean;
+}): EpisodeCandidate | null {
+  const text = input.userText.trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  let kind: EpisodeKind | null = null;
+  let title = '';
+  let importance = 0;
+  let emotionalWeight = 0;
+  let relationshipRelevance = 0;
+
+  if (input.isFirstConversationTurn) {
+    kind = 'first'; title = '第一次对话'; importance = 0.82;
+    emotionalWeight = 0.65; relationshipRelevance = 0.9;
+  } else if (/(第一次|初次)/.test(text)) {
+    kind = 'first'; title = '一件第一次发生的事'; importance = 0.88;
+    emotionalWeight = 0.72; relationshipRelevance = 0.82;
+  } else if (/(对不起|原谅|和好|不生气了|没关系)/.test(text)) {
+    kind = 'repair'; title = '一次关系修复'; importance = 0.8;
+    emotionalWeight = 0.82; relationshipRelevance = 0.92;
+  } else if (/(讨厌你|闭嘴|滚|骗我|很失望|生气)/.test(text)) {
+    kind = 'conflict'; title = '一次明显的分歧'; importance = 0.82;
+    emotionalWeight = 0.88; relationshipRelevance = 0.9;
+  } else if (/(我们|一起|之前).{0,24}(完成|解决|做完|成功|准备|决定)|(?:完成|解决|做完|成功).{0,16}(我们|一起)/.test(text)) {
+    kind = 'shared-achievement'; title = '共同完成的一件事'; importance = 0.84;
+    emotionalWeight = 0.68; relationshipRelevance = 0.88;
+  } else if (/(告诉你一个秘密|只告诉你|我有点害怕|我很难过|我压力很大)/.test(text)) {
+    kind = 'disclosure'; title = '一次重要的倾诉'; importance = 0.76;
+    emotionalWeight = 0.8; relationshipRelevance = 0.78;
+  } else if (/(非常开心|太开心|特别开心|崩溃|非常难过|特别难过|受到挫折|压力特别大)/.test(text)) {
+    kind = 'strong-emotion'; title = '一次强烈的情绪经历'; importance = 0.72;
+    emotionalWeight = 0.9; relationshipRelevance = 0.55;
+  } else if (/(爱你|很喜欢你|依赖你|需要你|谢谢你陪我)/.test(text)) {
+    kind = 'relationship'; title = '一次重要的情感表达'; importance = 0.7;
+    emotionalWeight = 0.78; relationshipRelevance = 0.9;
+  }
+  if (!kind) return null;
+
+  const aiAction = input.aiText?.trim().replace(/\s+/g, ' ').slice(0, 240) || null;
+  const userAction = text.slice(0, 240);
+  const userEmotion = episodeEmotion(text);
+  const summary = aiAction
+    ? `用户表达了“${userAction}”；${input.characterName}回应了“${aiAction}”。`
+    : `用户表达了“${userAction}”。`;
+  const fingerprint = kind === 'first' && input.isFirstConversationTurn
+    ? 'first:first-conversation'
+    : `${kind}:${normalize(userAction).slice(0, 96)}`;
+  return { kind, fingerprint, title, summary, context: null,
+    participants: ['local-user', input.characterId], userAction, aiAction,
+    userEmotion, aiEmotion: input.aiEmotion ?? null, relationshipRelevance,
+    emotionalWeight, importance, confidence: 0.9, tags: [kind] };
+}
+
+export function scoreEpisode(
+  episode: StoredEpisode,
+  query: string,
+  now: Date,
+  memoryCue = false,
+): number {
+  const lexical = lexicalSimilarity(query, `${episode.title}${episode.summary}${episode.tags.join('')}`);
+  const ageDays = Math.max(0, (now.getTime() - episode.eventTime.getTime()) / 86_400_000);
+  const recency = Math.exp(-ageDays / 120);
+  const reinforcement = Math.min(1, Math.log2(episode.reinforcementCount + 1) / 3);
+  return 0.34 * lexical + 0.18 * episode.importance + 0.14 * episode.emotionalWeight +
+    0.13 * episode.relationshipRelevance + 0.08 * episode.confidence + 0.07 * recency +
+    0.04 * reinforcement + (memoryCue ? 0.02 : 0);
+}
+
+function episodeEmotion(text: string): string | null {
+  if (/(开心|高兴|成功|完成)/.test(text)) return '积极';
+  if (/(难过|失望|崩溃|挫折)/.test(text)) return '低落';
+  if (/(生气|讨厌|滚|闭嘴)/.test(text)) return '愤怒';
+  if (/(害怕|压力|焦虑)/.test(text)) return '不安';
+  return null;
+}

@@ -7,11 +7,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
 import { CognitionService } from '@ailover/cognition';
-import { MemoryService } from '@ailover/memory';
+import { EpisodicMemoryService, MemoryService } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
+  SqliteEpisodicMemoryRepository,
   SqliteCompanionSettingsRepository,
   SqliteDesktopPetWindowStateRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
@@ -71,7 +72,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(10);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(11);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -187,6 +188,53 @@ describe('SqliteConversationRepository', () => {
     expect((await restored.listMessagesAround('conversation-1', 'message-3', 1)).map(({ id }) => id))
       .toEqual(['message-2', 'message-3', 'message-4']);
     expect(await restored.listMessagesAround('conversation-1', 'missing-message', 2)).toEqual([]);
+    second.close();
+  });
+});
+
+describe('SqliteEpisodicMemoryRepository', () => {
+  it('restores and recalls evidence-backed episodes across restarts', async () => {
+    const path = join(tmpdir(), `ailover-episode-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const character = createCharacter({ name: '艾琳', gender: '女', ageSetting: '成年',
+      identity: 'AI 伴侣', background: '', appearance: '银白色长发', speakingStyle: '温柔',
+      personalityTemplateId: 'gentle' }, { idGenerator: { next: () => 'episode-character' },
+      clock: { now: () => new Date('2026-09-11T00:00:00Z') } });
+    const first = openAppDatabase(path);
+    await new SqliteCharacterRepository(first).save(character);
+    const conversations = new SqliteConversationRepository(first);
+    const at = new Date('2026-09-11T01:00:00Z');
+    await conversations.create({ id: 'episode-conversation', characterId: character.id,
+      title: '共同经历', startedAt: at, lastMessageAt: at });
+    await conversations.saveMessage({ id: 'episode-user', conversationId: 'episode-conversation',
+      role: 'user', content: '我们一起完成面试准备了', status: 'completed', model: null, createdAt: at });
+    await conversations.saveMessage({ id: 'episode-ai', conversationId: 'episode-conversation',
+      role: 'assistant', content: '你坚持下来了。', status: 'completed', model: 'model-a',
+      createdAt: new Date('2026-09-11T01:00:01Z') });
+    await conversations.saveMessage({ id: 'episode-query', conversationId: 'episode-conversation',
+      role: 'user', content: '还记得我们完成面试准备吗', status: 'completed', model: null,
+      createdAt: new Date('2026-09-12T01:00:00Z') });
+    const captured = await new EpisodicMemoryService({
+      repository: new SqliteEpisodicMemoryRepository(first), idGenerator: { next: () => 'episode-1' },
+    }).capture({ characterId: character.id, characterName: character.name,
+      conversationId: 'episode-conversation', userMessageId: 'episode-user',
+      userText: '我们一起完成面试准备了', aiMessageId: 'episode-ai', aiText: '你坚持下来了。',
+      relatedMemoryIds: ['memory-1'], now: at });
+    expect(captured?.kind).toBe('shared-achievement');
+    first.close();
+
+    const second = openAppDatabase(path);
+    const repository = new SqliteEpisodicMemoryRepository(second);
+    const restored = await repository.findByFingerprint(character.id, captured!.fingerprint);
+    expect(restored?.sourceMessageIds).toEqual(['episode-user', 'episode-ai']);
+    expect(restored?.relatedMemoryIds).toEqual(['memory-1']);
+    const recalled = await new EpisodicMemoryService({ repository,
+      idGenerator: { next: randomUUID } }).recall({ characterId: character.id,
+      queryMessageId: 'episode-query', query: '还记得我们完成面试准备吗',
+      now: new Date('2026-09-12T01:00:00Z') });
+    expect(recalled[0]?.id).toBe('episode-1');
+    expect((second.sqlite.prepare('SELECT COUNT(*) AS count FROM episode_recalls').get() as
+      { count: number }).count).toBe(1);
     second.close();
   });
 });

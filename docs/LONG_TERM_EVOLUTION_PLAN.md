@@ -13,8 +13,8 @@ conflict handling, decay, cognition bounds, evidence tracking and SQLite storage
 
 ## Delivery order
 
-1. Personality Projection: traits become scenario-aware behavior guidance and response strategy.
-2. Episodic Memory: detect, persist and recall significant shared experiences.
+1. Personality Projection: completed; traits become scenario-aware behavior guidance and response strategy.
+2. Episodic Memory: completed; detect, persist and recall significant shared experiences.
 3. Semantic Extraction: combine deterministic rules with validated structured model candidates.
 4. Memory Consolidation: derive evidence-backed patterns from multiple compatible episodes.
 5. Self Model: add facts, preferences, beliefs, values, experiences and change history about the AI.

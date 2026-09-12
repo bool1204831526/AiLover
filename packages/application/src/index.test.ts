@@ -41,6 +41,16 @@ describe('assembleChatContext', () => {
     expect(result[1]?.content).toContain('当前连续状态');
     expect(result[1]?.content).not.toContain('0.');
   });
+
+  it('limits recalled episodes and labels them as evidence-backed experiences', () => {
+    const episodes = Array.from({ length: 5 }, (_, index) => ({ title: `经历 ${index}`,
+      summary: `共同完成了事情 ${index}`, eventTime: new Date(`2026-09-${index + 1}T00:00:00Z`) }));
+    const result = assembleChatContext(character, [], 100, [], '', episodes);
+    const context = result[1]?.content ?? '';
+    expect(context).toContain('真实经历过');
+    expect(context).toContain('经历 2');
+    expect(context).not.toContain('经历 3');
+  });
 });
 
 describe('companion scheduling', () => {
