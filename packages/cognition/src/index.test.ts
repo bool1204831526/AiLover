@@ -35,7 +35,7 @@ describe('emotional associations', () => {
   });
 });
 
-it('summarizes personality evidence with recent explanations', () => {
+  it('summarizes personality evidence with recent explanations', () => {
   const evidence: EvolutionEvidence[] = [
     { characterId: 'character-1', trait: 'initiative', direction: 1, sourceMessageId: 'old', reason: '欢迎主动安排', recordedAt: new Date('2026-09-01') },
     { characterId: 'character-1', trait: 'initiative', direction: 1, sourceMessageId: 'new', reason: '鼓励主动提议', recordedAt: new Date('2026-09-11') },
@@ -44,6 +44,15 @@ it('summarizes personality evidence with recent explanations', () => {
   const result = summarizePersonalityEvidence(evidence, 'initiative');
   expect(result[0]).toMatchObject({ trait: 'initiative', positive: 2, negative: 0, total: 2 });
   expect(result[0]?.latest[0]?.sourceMessageId).toBe('new');
+});
+
+it('includes recalled emotional associations in interaction state', async () => {
+  const repository = new MemoryCognitionRepository();
+  const service = new CognitionService(repository, { next: () => crypto.randomUUID() });
+  const state = await service.processInteraction({ characterId: 'character-1', baseline,
+    sourceMessageId: 'message-association', text: '今天聊聊近况', now: new Date('2026-09-12'),
+    emotionalAssociations: [{ relevance: 1, emotionalWeight: 1, userEmotion: '积极', relationshipRelevance: 0.9 }] });
+  expect(state.emotion.valence).toBeGreaterThan(0.55);
 });
 
 class MemoryCognitionRepository implements CognitionRepository {

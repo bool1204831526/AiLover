@@ -838,7 +838,10 @@ async function completeChat(
     }
     const cognition = await cognitionService.processInteraction({ characterId: character.id,
       baseline: character.personalityBaseline, sourceMessageId: userMessage.id,
-      text: userMessage.content, now: userMessage.createdAt });
+      text: userMessage.content, now: userMessage.createdAt,
+      emotionalAssociations: recalledEpisodes.map((episode) => ({ relevance: episode.score,
+        emotionalWeight: episode.emotionalWeight, userEmotion: episode.userEmotion,
+        relationshipRelevance: episode.relationshipRelevance })) });
     const interaction = analyzeInteraction(userMessage.content);
     const responsePlan = createResponsePlan(cognition, interaction);
     if (interaction.reasons.includes('received positive affection')) completionReaction = 'jumping';

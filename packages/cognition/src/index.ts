@@ -157,6 +157,7 @@ export class CognitionService {
     sourceMessageId: string;
     text: string;
     now: Date;
+    emotionalAssociations?: EmotionalAssociation[];
   }): Promise<CognitionSnapshot> {
     const current = await this.getOrCreate(input.characterId, input.baseline, input.now);
     const signal = analyzeInteraction(input.text);
@@ -170,7 +171,8 @@ export class CognitionService {
       }
     }
     const snapshot: CognitionSnapshot = { id: this.idGenerator.next(), characterId: input.characterId,
-      emotion: applyEmotion(current.emotion, signal.emotionDelta),
+      emotion: applyEmotionalAssociations(applyEmotion(current.emotion, signal.emotionDelta),
+        input.emotionalAssociations ?? []),
       relationship: applyRelationship(current.relationship, signal.relationshipDelta),
       personality, reason: signal.reasons.join('；') || 'ordinary conversation',
       sourceMessageId: input.sourceMessageId, ruleVersion: COGNITION_RULE_VERSION,
