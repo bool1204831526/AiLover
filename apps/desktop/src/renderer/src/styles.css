@@ -1084,16 +1084,25 @@ button:disabled {
   padding: 30px 28px;
   overflow-y: auto;
 }
+.relationship-timeline { margin-top: 22px; max-width: 760px; }
+.relationship-timeline ol { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 0; }
+.relationship-timeline li { display: grid; grid-template-columns: 110px 14px 1fr; gap: 12px; min-height: 64px; }
+.relationship-timeline li::before { content: ''; grid-column: 2; grid-row: 1; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #a94756; box-shadow: 0 0 0 3px #fbfaf8; }
+.relationship-timeline li::after { content: ''; grid-column: 2; grid-row: 1; width: 1px; height: 100%; margin: 14px 0 0 4px; background: #d8d4ce; }
+.relationship-timeline li:last-child::after { display: none; }
+.relationship-timeline time { color: #777a7e; font-size: 12px; padding-top: 2px; }
+.relationship-timeline li div { display: flex; flex-direction: column; gap: 4px; padding-bottom: 18px; }
+.relationship-timeline li span { color: #777a7e; font-size: 12px; }
 
 .memory-page { overflow: auto; padding: 24px 28px 40px; }
 .memory-list { display: grid; gap: 12px; max-width: 760px; }
-.memory-entry { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; background: var(--surface); }
+.memory-entry { border: 1px solid #d8d4ce; border-radius: 8px; padding: 16px 18px; background: #fbfaf8; }
 .memory-entry-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
-.memory-entry-head span { color: var(--muted); font-size: 12px; }
+.memory-entry-head span { color: #777a7e; font-size: 12px; }
 .memory-entry p { margin: 9px 0; line-height: 1.6; }
-.memory-entry small { color: var(--muted); }
+.memory-entry small { color: #777a7e; }
 .memory-entry-actions { display: flex; gap: 8px; margin-top: 12px; }
-.memory-entry-actions button { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 3px 0; }
+.memory-entry-actions button { border: 0; background: transparent; color: #a94756; cursor: pointer; padding: 3px 0; }
 
 .character-page {
   min-height: 0;

@@ -15,6 +15,7 @@ import {
   ModelProfileInputSchema,
   ModelProfileSnapshotSchema,
   RelationshipSummarySchema,
+  RelationshipTimelineSchema,
   MemoryCenterEntriesSchema,
   MemoryCorrectionSchema,
   CharacterVisualProfileSchema,
@@ -96,6 +97,10 @@ const api: AiLoverDesktopApi = {
     getSummary: async () => {
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.relationshipGetSummary);
       return result === null ? null : RelationshipSummarySchema.parse(result);
+    },
+    getTimeline: async () => {
+      const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.relationshipGetTimeline);
+      return RelationshipTimelineSchema.parse(result);
     },
   },
   memory: {

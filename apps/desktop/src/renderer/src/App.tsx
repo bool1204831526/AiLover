@@ -10,6 +10,7 @@ import type {
   CharacterVisualProfile, ImageCapabilities, ModelConnectionResult, ModelProfileInput,
   RelationshipSummary, CompanionSettings,
   MemoryCenterEntry,
+  RelationshipMilestone,
   DesktopPetPack,
 } from '@ailover/contracts';
 import { retainRecentMessages } from '@ailover/application';
@@ -288,13 +289,17 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
 
 function RelationshipView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
   const [summary, setSummary] = useState<RelationshipSummary | null>(null);
+  const [timeline, setTimeline] = useState<RelationshipMilestone[]>([]);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setSummary(null);
+    setTimeline([]);
     setFailed(false);
     if (!character || !window.ailover) return;
-    void window.ailover.relationship.getSummary().then(setSummary).catch(() => setFailed(true));
+    void Promise.all([window.ailover.relationship.getSummary(), window.ailover.relationship.getTimeline()])
+      .then(([nextSummary, nextTimeline]) => { setSummary(nextSummary); setTimeline(nextTimeline); })
+      .catch(() => setFailed(true));
   }, [character?.id]);
 
   return <><header className="conversation-header"><div><span className="eyebrow">你们的关系</span>
@@ -307,7 +312,20 @@ function RelationshipView({ character }: { character: CharacterSnapshot | null }
         <p>{summary.description}</p><div className="relationship-mood"><strong>此刻的相处</strong>
           <span>{summary.mood}</span></div>
         <small>更新于 {new Date(summary.updatedAt).toLocaleString('zh-CN')}</small>
-      </section> : <div className="relationship-empty"><p>正在整理你们的相处状态…</p></div>}</div></>;
+      </section> : <div className="relationship-empty"><p>正在整理你们的相处状态…</p></div>}
+      {character && !failed && timeline.length > 0 && <section className="relationship-timeline">
+        <div className="settings-heading"><h3>关系里程碑</h3><p>你们共同经历的重要时刻。</p></div>
+        <ol>{timeline.map((milestone) => <li key={milestone.episodeId}>
+          <time>{new Date(milestone.occurredAt).toLocaleDateString('zh-CN')}</time>
+          <div><strong>{milestone.title}</strong><span>{milestoneLabel(milestone.kind)}</span></div>
+        </li>)}</ol>
+      </section>}
+    </div></>;
+}
+
+function milestoneLabel(kind: RelationshipMilestone['kind']): string {
+  return ({ first: '初次相遇', 'shared-achievement': '共同完成', 'strong-emotion': '重要感受',
+    conflict: '关系波动', repair: '修复与和好', disclosure: '真心倾诉', relationship: '关系表达' })[kind];
 }
 
 function ChatView({ character, bootstrapError, modelConfigured, onOpenSettings }: {

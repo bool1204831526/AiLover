@@ -80,3 +80,7 @@
 
 - Added schema 14 storage for categorized facts, beliefs, values and changes with source messages and versions.
 - Chat now saves new self knowledge and restores the four most recent active entries across restarts.
+
+# Relationship timeline
+
+- Added a chronological relationship view for important evidence-backed Episode milestones.

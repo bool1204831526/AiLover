@@ -26,7 +26,8 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { advanceFutureIntentions, buildMemoryCenterEntries, EpisodicMemoryService,
-  consolidateEpisodes, intentionsFromMemories, MemoryService, type ConsolidatedMemory, type RecalledEpisode,
+  buildRelationshipTimeline, consolidateEpisodes, intentionsFromMemories, MemoryService,
+  type ConsolidatedMemory, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
@@ -638,6 +639,13 @@ function registerIpcHandlers(): void {
     );
     const summary = relationshipSummary(state);
     return RelationshipSummarySchema.parse({ ...summary, updatedAt: summary.updatedAt.toISOString() });
+  });
+  ipcMain.handle(IPC_CHANNELS.relationshipGetTimeline, async () => {
+    const current = await characterService.findCurrent();
+    if (!current) return [];
+    const episodes = await episodicMemoryRepository.searchCandidates(current.id, '', true, 100);
+    return buildRelationshipTimeline(episodes).map((milestone) => ({ ...milestone,
+      occurredAt: milestone.occurredAt.toISOString() }));
   });
 
   ipcMain.handle(IPC_CHANNELS.characterVisualGet, async () => {

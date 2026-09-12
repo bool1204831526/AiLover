@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   chatCancel: 'chat:cancel',
   chatStream: 'chat:stream',
   relationshipGetSummary: 'relationship:get-summary',
+  relationshipGetTimeline: 'relationship:get-timeline',
   memoryList: 'memory:list',
   memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete',
   characterVisualGet: 'character-visual:get',
@@ -300,6 +301,14 @@ export const BootstrapResponseSchema = z.object({
 
 export type BootstrapResponse = z.infer<typeof BootstrapResponseSchema>;
 
+export const RelationshipMilestoneSchema = z.object({
+  episodeId: z.string().min(1), occurredAt: z.iso.datetime(), title: z.string().min(1),
+  kind: z.enum(['first', 'shared-achievement', 'strong-emotion', 'conflict', 'repair', 'disclosure', 'relationship']),
+  importance: z.number().min(0).max(1),
+});
+export const RelationshipTimelineSchema = z.array(RelationshipMilestoneSchema);
+export type RelationshipMilestone = z.infer<typeof RelationshipMilestoneSchema>;
+
 export const MemoryCenterEntrySchema = z.object({
   id: z.string().min(1), type: z.enum(['semantic', 'preference', 'plan', 'episodic', 'relationship']),
   subject: z.string(), content: z.string(), confidence: z.number().min(0).max(1),
@@ -335,6 +344,7 @@ export interface AiLoverDesktopApi {
   };
   relationship: {
     getSummary(): Promise<RelationshipSummary | null>;
+    getTimeline(): Promise<RelationshipMilestone[]>;
   };
   memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>; delete(id: string): Promise<void> };
   visuals: {
