@@ -39,18 +39,15 @@ body:has(.desktop-pet-shell),
   width: min(72vw, 168px);
   aspect-ratio: 1;
   place-items: center;
-  overflow: hidden;
   color: #fff;
-  background: #c5a7ed;
-  border: 3px solid rgb(255 255 255 / 80%);
-  border-radius: 50%;
-  box-shadow: 0 10px 28px rgb(49 38 61 / 22%);
+  background: transparent;
   animation: pet-breathe 3.4s ease-in-out infinite;
   font-size: 52px;
   font-weight: 700;
 }
 
-.pet-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.pet-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.pet-portrait > span { display: grid; width: 100%; height: 100%; place-items: center; background: #c5a7ed; border: 3px solid rgb(255 255 255 / 80%); border-radius: 50%; box-shadow: 0 10px 28px rgb(49 38 61 / 22%); }
 .pet-name { padding: 5px 10px; background: rgb(255 255 255 / 86%); border-radius: 6px; box-shadow: 0 4px 14px rgb(30 25 35 / 12%); font-size: 12px; font-weight: 650; }
 .pet-close { position: absolute; z-index: 2; top: 8px; right: 8px; display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: #625c68; background: rgb(255 255 255 / 88%); border: 0; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag; }
 .pet-open { position: absolute; right: 10px; bottom: 10px; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; color: #fff; background: #a94756; border: 0; border-radius: 50%; box-shadow: 0 5px 14px rgb(66 35 43 / 24%); cursor: pointer; -webkit-app-region: no-drag; }
