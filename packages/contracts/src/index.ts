@@ -176,7 +176,7 @@ export const CodexPetManifestSchema = z.object({
   id: z.string().min(1).max(80),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).optional(),
-  spriteVersionNumber: z.literal(2),
+  spriteVersionNumber: z.preprocess((value) => value === undefined || value === '2' ? 2 : value, z.literal(2)),
   spritesheetPath: z.string().min(1),
 }).strip();
 export type CodexPetManifest = z.infer<typeof CodexPetManifestSchema>;

@@ -59,6 +59,12 @@ describe('shared contracts', () => {
     const manifest = CodexPetManifestSchema.parse({ id: 'boba', displayName: 'Boba',
       spriteVersionNumber: 2, spritesheetPath: 'spritesheet.webp' });
     expect(manifest.spriteVersionNumber).toBe(2);
+    expect(CodexPetManifestSchema.parse({ id: 'legacy-manifest', displayName: '旧清单',
+      spritesheetPath: 'spritesheet.webp' }).spriteVersionNumber).toBe(2);
+    expect(CodexPetManifestSchema.parse({ id: 'string-version', displayName: '字符串版本',
+      spriteVersionNumber: '2', spritesheetPath: 'spritesheet.webp' }).spriteVersionNumber).toBe(2);
+    expect(() => CodexPetManifestSchema.parse({ id: 'v1', displayName: '旧图集',
+      spriteVersionNumber: 1, spritesheetPath: 'spritesheet.webp' })).toThrow();
     expect(() => DesktopPetPackSchema.parse({ version: 1, mode: 'codex-v2', availableActions: [],
       missingRecommended: [], actionDataUrls: {}, message: 'ready' })).toThrow();
   });

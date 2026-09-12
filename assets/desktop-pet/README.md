@@ -23,6 +23,9 @@ It contains the nine standard Codex animation rows and sixteen clockwise look di
 }
 ```
 
+For compatibility with early custom Codex pets, AiLover also accepts a missing
+`spriteVersionNumber` or the string value `"2"` when the atlas dimensions prove it is a v2 pack.
+
 ## Compatible Format: Separate Action Files
 
 - Transparent animated WebP (recommended) or static PNG
