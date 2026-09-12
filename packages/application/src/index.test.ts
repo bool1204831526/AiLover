@@ -4,7 +4,7 @@ import { createCharacter } from '@ailover/domain';
 
 import { assembleChatContext, MAX_RETAINED_CHAT_MESSAGES, retainRecentMessages,
   shouldSendCompanionPrompt, isCompanionQuietHours, codexPetFrame, codexPetLookFrame,
-  type StoredChatMessage } from './index';
+  readPngDimensions, readWebPDimensions, type StoredChatMessage } from './index';
 
 const character = createCharacter({
   name: '艾琳', gender: '女', ageSetting: '成年', identity: '用户的 AI 伴侣', background: '来自海边',
@@ -84,5 +84,18 @@ describe('Codex v2 pet animation', () => {
     expect(codexPetLookFrame(0, 30)).toMatchObject({ row: 10, column: 0 });
     expect(codexPetLookFrame(-30, 0)).toMatchObject({ row: 10, column: 4 });
     expect(codexPetLookFrame(2, 2)).toBeNull();
+  });
+
+  it('reads atlas dimensions without relying on Electron image decoding', () => {
+    const vp8x = Buffer.alloc(30);
+    vp8x.write('RIFF', 0); vp8x.writeUInt32LE(22, 4); vp8x.write('WEBPVP8X', 8); vp8x.writeUInt32LE(10, 16);
+    vp8x[24] = 0xff; vp8x[25] = 0x05; vp8x[27] = 0xef; vp8x[28] = 0x08;
+    expect(readWebPDimensions(vp8x)).toEqual({ width: 1536, height: 2288 });
+
+    const png = Buffer.alloc(24);
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.write('IHDR', 12);
+    png.writeUInt32BE(1536, 16); png.writeUInt32BE(2288, 20);
+    expect(readPngDimensions(png)).toEqual({ width: 1536, height: 2288 });
+    expect(readWebPDimensions(Buffer.from('not-webp'))).toBeNull();
   });
 });

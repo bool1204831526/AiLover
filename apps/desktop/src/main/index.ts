@@ -20,7 +20,8 @@ import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ai
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
   relationshipSummary } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, shouldSendCompanionPrompt,
-  type StoredChatMessage, type StoredConversation } from '@ailover/application';
+  readPngDimensions, readWebPDimensions, type StoredChatMessage,
+  type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { MemoryService, type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
@@ -225,9 +226,8 @@ async function validateCodexPetAtlas(sourceDirectory: string, manifest: CodexPet
   if (!info.isFile() || info.size > 100 * 1024 * 1024) throw new Error(`${fileName} 无效或超过 100 MB。`);
   const data = await readFile(source);
   if (extension === '.webp' && isAnimatedWebP(data)) throw new Error('Codex v2 spritesheet.webp 必须是静态图集，不能是动画 WebP。');
-  const image = nativeImage.createFromBuffer(data);
-  if (image.isEmpty()) throw new Error(`${fileName} 不是有效的图片。`);
-  const size = image.getSize();
+  const size = extension === '.webp' ? readWebPDimensions(data) : readPngDimensions(data);
+  if (!size) throw new Error(`${fileName} 不是有效的图片。`);
   if (size.width !== 1536 || size.height !== 2288) {
     throw new Error(`Codex v2 图集尺寸必须是 1536 x 2288，当前为 ${size.width} x ${size.height}。`);
   }

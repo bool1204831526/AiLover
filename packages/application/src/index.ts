@@ -161,6 +161,49 @@ export function codexPetLookFrame(dx: number, dy: number, deadzone = 18): CodexP
     : { row: 10, column: direction - 8, duration: 120 };
 }
 
+export type ImageDimensions = { width: number; height: number };
+
+function bytesEqual(data: Uint8Array, offset: number, expected: number[]): boolean {
+  return expected.every((value, index) => data[offset + index] === value);
+}
+
+export function readPngDimensions(data: Uint8Array): ImageDimensions | null {
+  if (data.length < 24 || !bytesEqual(data, 0, [137, 80, 78, 71, 13, 10, 26, 10])
+    || !bytesEqual(data, 12, [73, 72, 68, 82])) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+export function readWebPDimensions(data: Uint8Array): ImageDimensions | null {
+  if (data.length < 20 || !bytesEqual(data, 0, [82, 73, 70, 70])
+    || !bytesEqual(data, 8, [87, 69, 66, 80])) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let offset = 12;
+  while (offset + 8 <= data.length) {
+    const payload = offset + 8;
+    const chunkSize = view.getUint32(offset + 4, true);
+    if (payload + chunkSize > data.length) return null;
+    if (bytesEqual(data, offset, [86, 80, 56, 88]) && chunkSize >= 10) {
+      const width = 1 + data[payload + 4]! + (data[payload + 5]! << 8) + (data[payload + 6]! << 16);
+      const height = 1 + data[payload + 7]! + (data[payload + 8]! << 8) + (data[payload + 9]! << 16);
+      return { width, height };
+    }
+    if (bytesEqual(data, offset, [86, 80, 56, 76]) && chunkSize >= 5 && data[payload] === 47) {
+      const bits = view.getUint32(payload + 1, true);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+    }
+    if (bytesEqual(data, offset, [86, 80, 56, 32]) && chunkSize >= 10
+      && bytesEqual(data, payload + 3, [157, 1, 42])) {
+      return { width: view.getUint16(payload + 6, true) & 0x3fff,
+        height: view.getUint16(payload + 8, true) & 0x3fff };
+    }
+    offset = payload + chunkSize + (chunkSize % 2);
+  }
+  return null;
+}
+
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type MemoryContextItem = { subject: string; content: string };
 
