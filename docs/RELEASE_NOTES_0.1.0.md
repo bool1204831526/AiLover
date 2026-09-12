@@ -9,6 +9,7 @@
 - Searchable long-term chat history with surrounding context and return-to-latest navigation.
 - Evidence-backed memory for preferences, plans and important interactions.
 - Evidence-backed episodic memory for significant shared experiences, with bounded recall and audit history.
+- Implicit preference extraction for expressions such as “最近越来越离不开拿铁了”, marked with lower confidence.
 - Bounded emotion, relationship and personality evolution with traceable source messages.
 - Scenario-aware personality projection that turns current traits into private, natural-language behavior guidance.
 - Natural-language relationship summary without exposing internal scores.

@@ -118,6 +118,13 @@ export function extractMemoryCandidates(text: string, now: Date): MemoryCandidat
         preference[1] === '讨厌' || preference[1] === '不喜欢' ? 'negative' : 'positive', now));
       continue;
     }
+    const implicitPreference = sentence.match(/^(?:最近|现在|这段时间)(?:越来越|总是|经常)?(?:离不开|会喝|会吃|想喝|想吃)([^，,。！？!?]{1,30})/);
+    if (implicitPreference?.[1]) {
+      const subject = implicitPreference[1].trim().replace(/了$/, '');
+      results.push({ ...candidate('preference', subject, sentence, 'positive', now),
+        confidence: 0.72, importance: 0.58, evidence: `隐含表达：${sentence}` });
+      continue;
+    }
     if (/^我(?:打算|计划|准备|明天要|后天要|下周要|今晚要|周末要)/.test(sentence)) {
       results.push(candidate('plan', '用户近期计划', sentence, 'neutral', now));
       continue;

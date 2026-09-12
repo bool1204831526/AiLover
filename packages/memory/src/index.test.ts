@@ -77,6 +77,14 @@ describe('memory candidate extraction', () => {
     expect(extractMemoryCandidates('如果我喜欢咖啡会怎样？我喜欢咖啡吗？也许我明天要出门。', now))
       .toEqual([]);
   });
+
+  it('extracts implicit preferences with lower confidence than explicit claims', () => {
+    const result = extractMemoryCandidates('最近越来越离不开拿铁了。', now);
+    expect(result[0]?.type).toBe('preference');
+    expect(result[0]?.subject).toBe('拿铁');
+    expect(result[0]?.confidence).toBeLessThan(0.92);
+    expect(result[0]?.evidence).toContain('隐含表达');
+  });
 });
 
 describe('MemoryService', () => {
