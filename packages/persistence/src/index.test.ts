@@ -72,7 +72,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(11);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(12);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
