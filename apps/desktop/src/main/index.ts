@@ -208,7 +208,14 @@ async function importDesktopPetPack(character: Character, sourceDirectory: strin
     const source = join(sourceDirectory, fileName);
     const info = await stat(source);
     if (!info.isFile() || info.size > 20 * 1024 * 1024) throw new Error(`${fileName} 无效或超过 20 MB。`);
-    if (nativeImage.createFromBuffer(await readFile(source)).isEmpty()) throw new Error(`${fileName} 不是有效图片。`);
+    const data = await readFile(source);
+    const extension = extname(fileName).toLowerCase();
+    const valid = extension === '.webp'
+      ? data.length >= 16 && data.subarray(0, 4).toString('ascii') === 'RIFF'
+        && data.subarray(8, 12).toString('ascii') === 'WEBP'
+        && ['VP8 ', 'VP8L', 'VP8X'].includes(data.subarray(12, 16).toString('ascii'))
+      : !nativeImage.createFromBuffer(data).isEmpty();
+    if (!valid) throw new Error(`${fileName} 不是有效的 ${extension === '.webp' ? 'WebP' : 'PNG'} 图片。`);
     totalBytes += info.size;
   }
   if (totalBytes > 100 * 1024 * 1024) throw new Error('动画包总大小不能超过 100 MB。');

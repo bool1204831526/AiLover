@@ -145,6 +145,7 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
   const [assetError, setAssetError] = useState<string | null>(null);
   const [petPack, setPetPack] = useState<DesktopPetPack | null>(null);
   const [importingPetPack, setImportingPetPack] = useState(false);
+  const [petPackError, setPetPackError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!window.ailover) return;
@@ -166,9 +167,12 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
   async function importPetPack(): Promise<void> {
     if (!window.ailover || importingPetPack) return;
     setImportingPetPack(true);
-    setAssetError(null);
+    setPetPackError(null);
     try { setPetPack(await window.ailover.visuals.importDesktopPetPack()); }
-    catch (error) { setAssetError(error instanceof Error ? error.message : '动画包导入失败，请检查素材清单。'); }
+    catch (error) {
+      const message = error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': Error: /, '') : '';
+      setPetPackError(message || '动画包导入失败，请检查素材清单。');
+    }
     finally { setImportingPetPack(false); }
   }
 
@@ -224,6 +228,7 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
         <button className="secondary-action import-action" type="button" disabled={importingPetPack}
           onClick={() => void importPetPack()}><Upload size={16} aria-hidden="true" />
           {importingPetPack ? '正在校验' : petPack ? '导入新版本' : '导入动画包'}</button>
+        {petPackError && <p className="form-error">{petPackError}</p>}
       </section>
     </>}</div></>;
 }
