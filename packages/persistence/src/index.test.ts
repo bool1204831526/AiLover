@@ -13,6 +13,7 @@ import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
   SqliteCompanionSettingsRepository,
+  SqliteDesktopPetWindowStateRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
 } from './index';
 
@@ -70,7 +71,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(9);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(10);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -78,6 +79,22 @@ describe('database backup safety', () => {
       .run(999, new Date().toISOString());
     snapshot.close();
     expect(() => validateRestoredDatabase(snapshotPath)).toThrow('更高版本');
+  });
+});
+
+describe('SqliteDesktopPetWindowStateRepository', () => {
+  it('restores the last desktop pet bounds', () => {
+    const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const first = openAppDatabase(path);
+    const bounds = new SqliteDesktopPetWindowStateRepository(first);
+    expect(bounds.get()).toBeNull();
+    bounds.save({ x: 120, y: 80, width: 240, height: 300 });
+    first.close();
+    const second = openAppDatabase(path);
+    expect(new SqliteDesktopPetWindowStateRepository(second).get())
+      .toEqual({ x: 120, y: 80, width: 240, height: 300 });
+    second.close();
   });
 });
 

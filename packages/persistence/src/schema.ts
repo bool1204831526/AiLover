@@ -20,6 +20,15 @@ export const companionSettings = sqliteTable('companion_settings', {
   updatedAt: text('updated_at').notNull(),
 });
 
+export const desktopPetWindowState = sqliteTable('desktop_pet_window_state', {
+  id: text('id').primaryKey(),
+  x: integer('x').notNull(),
+  y: integer('y').notNull(),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
 export const characters = sqliteTable('characters', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id),

@@ -14,6 +14,17 @@ const root = document.getElementById('root');
 
 if (!root) throw new Error('Renderer root element is missing');
 
+const legacyPetActions: Record<DesktopPetRuntimeState, keyof DesktopPetPack['actionDataUrls']> = {
+  idle: 'idle', 'running-left': 'walk-left', 'running-right': 'walk-right', waving: 'greet',
+  jumping: 'happy', failed: 'thinking', waiting: 'thinking', running: 'thinking', review: 'happy',
+  sleeping: 'sleep',
+};
+const atlasPetAnimations: Record<DesktopPetRuntimeState, CodexPetAnimation> = {
+  idle: 'idle', 'running-left': 'running-left', 'running-right': 'running-right', waving: 'waving',
+  jumping: 'jumping', failed: 'failed', waiting: 'waiting', running: 'running', review: 'review',
+  sleeping: 'waiting',
+};
+
 function DesktopPet(): React.JSX.Element {
   const [character, setCharacter] = useState<CharacterSnapshot | null>(null);
   const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
@@ -32,7 +43,7 @@ function DesktopPet(): React.JSX.Element {
   }, []);
   useEffect(() => {
     if (petPack?.mode === 'actions' || !petPack) return;
-    const frame = codexPetFrame(petState as CodexPetAnimation, codexFrameIndex);
+    const frame = codexPetFrame(atlasPetAnimations[petState], codexFrameIndex);
     const timer = window.setTimeout(() => setCodexFrameIndex((index) => index + 1), frame.duration);
     return () => window.clearTimeout(timer);
   }, [petState, codexFrameIndex, petPack?.mode]);
@@ -40,13 +51,10 @@ function DesktopPet(): React.JSX.Element {
     setCodexFrameIndex(0);
     if (petState !== 'idle') setLookFrame(null);
   }, [petState]);
-  const legacyActions: Record<DesktopPetRuntimeState, keyof DesktopPetPack['actionDataUrls']> = {
-    idle: 'idle', 'running-left': 'walk-left', 'running-right': 'walk-right', waving: 'greet',
-    jumping: 'happy', failed: 'thinking', waiting: 'thinking', running: 'thinking', review: 'happy',
-  };
-  const action = legacyActions[petState];
+  const action = legacyPetActions[petState];
+  const atlasAnimation = atlasPetAnimations[petState];
   const actionImage = petPack?.actionDataUrls[action] ?? petPack?.actionDataUrls.idle;
-  const atlasFrame = lookFrame ?? codexPetFrame(petState as CodexPetAnimation, codexFrameIndex);
+  const atlasFrame = lookFrame ?? codexPetFrame(atlasAnimation, codexFrameIndex);
   return <main className="desktop-pet-shell" onPointerMove={(event) => {
     if (petPack?.mode !== 'codex-v2' || petState !== 'idle') return;
     const bounds = event.currentTarget.getBoundingClientRect();

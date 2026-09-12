@@ -340,6 +340,27 @@ export class SqliteCompanionSettingsRepository {
   }
 }
 
+export type DesktopPetWindowBounds = { x: number; y: number; width: number; height: number };
+
+export class SqliteDesktopPetWindowStateRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public get(): DesktopPetWindowBounds | null {
+    const row = this.database.sqlite.prepare(`SELECT x, y, width, height
+      FROM desktop_pet_window_state WHERE id = ?`).get('default') as DesktopPetWindowBounds | undefined;
+    return row ?? null;
+  }
+
+  public save(bounds: DesktopPetWindowBounds): void {
+    this.database.sqlite.prepare(`INSERT INTO desktop_pet_window_state
+      (id, x, y, width, height, updated_at) VALUES ('default', ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET x = excluded.x, y = excluded.y, width = excluded.width,
+        height = excluded.height, updated_at = excluded.updated_at`).run(
+      bounds.x, bounds.y, bounds.width, bounds.height, new Date().toISOString(),
+    );
+  }
+}
+
 type MemoryRow = {
   id: string; user_id: string; character_id: string; type: string; subject: string; content: string;
   normalized_key: string; confidence: number; importance: number; emotional_weight: number;
@@ -550,5 +571,5 @@ function toFtsQuery(query: string): string {
 
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories,
-  messages, modelProfiles, personalityBaselines, personalityStates, reflections,
+  desktopPetWindowState, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
   relationshipStates, users } from './schema';

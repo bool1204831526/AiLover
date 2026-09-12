@@ -4,7 +4,7 @@ import { createCharacter } from '@ailover/domain';
 
 import { assembleChatContext, MAX_RETAINED_CHAT_MESSAGES, retainRecentMessages,
   shouldSendCompanionPrompt, isCompanionQuietHours, codexPetFrame, codexPetLookFrame,
-  readPngDimensions, readWebPDimensions, type StoredChatMessage } from './index';
+  fitDesktopPetBounds, readPngDimensions, readWebPDimensions, type StoredChatMessage } from './index';
 
 const character = createCharacter({
   name: '艾琳', gender: '女', ageSetting: '成年', identity: '用户的 AI 伴侣', background: '来自海边',
@@ -98,5 +98,15 @@ describe('Codex v2 pet animation', () => {
     png.writeUInt32BE(1536, 16); png.writeUInt32BE(2288, 20);
     expect(readPngDimensions(png)).toEqual({ width: 1536, height: 2288 });
     expect(readWebPDimensions(Buffer.from('not-webp'))).toBeNull();
+  });
+});
+
+describe('desktop pet window placement', () => {
+  it('restores visible bounds and clamps a disconnected display', () => {
+    const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
+    expect(fitDesktopPetBounds({ x: 100, y: 80, width: 240, height: 300 }, workArea))
+      .toEqual({ x: 100, y: 80, width: 240, height: 300 });
+    expect(fitDesktopPetBounds({ x: 3000, y: -900, width: 240, height: 300 }, workArea))
+      .toEqual({ x: 1680, y: 0, width: 240, height: 300 });
   });
 });

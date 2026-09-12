@@ -20,7 +20,7 @@ import {
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, projectCognition,
   relationshipSummary } from '@ailover/cognition';
-import { assembleChatContext, CharacterService, shouldSendCompanionPrompt,
+import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendCompanionPrompt,
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
@@ -31,6 +31,7 @@ import { createLogger } from '@ailover/observability';
 import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabase, prepareRestoredDatabase,
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
   SqliteMemoryRepository, SqliteModelProfileRepository, SqliteCompanionSettingsRepository,
+  SqliteDesktopPetWindowStateRepository,
   validateRestoredDatabase } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
@@ -66,6 +67,7 @@ const characterService = new CharacterService(new SqliteCharacterRepository(data
 const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
 const companionSettingsRepository = new SqliteCompanionSettingsRepository(database);
+const desktopPetWindowStateRepository = new SqliteDesktopPetWindowStateRepository(database);
 const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
   idGenerator: { next: randomUUID } });
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
@@ -81,9 +83,13 @@ let desktopPetReactionTimer: NodeJS.Timeout | null = null;
 let desktopPetMoveTimer: NodeJS.Timeout | null = null;
 let desktopPetRoamTimer: NodeJS.Timeout | null = null;
 let desktopPetRoamAnimation: NodeJS.Timeout | null = null;
+let desktopPetBoundsSaveTimer: NodeJS.Timeout | null = null;
+let desktopPetSleepTimer: NodeJS.Timeout | null = null;
 let desktopPetActivityState: DesktopPetRuntimeState = 'idle';
 let lastDesktopPetMoveAt = 0;
+let lastDesktopPetActivityAt = Date.now();
 let desktopPetInteractionCount = 0;
+let desktopPetIsRoaming = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 
@@ -129,6 +135,7 @@ function emitDesktopPetState(state: DesktopPetRuntimeState): void {
 
 function setDesktopPetActivity(state: DesktopPetRuntimeState, resetAfterMs?: number): void {
   if (desktopPetReactionTimer) clearTimeout(desktopPetReactionTimer);
+  if (state !== 'sleeping') lastDesktopPetActivityAt = Date.now();
   desktopPetActivityState = state;
   emitDesktopPetState(state);
   if (resetAfterMs) {
@@ -144,6 +151,7 @@ function setDesktopPetActivity(state: DesktopPetRuntimeState, resetAfterMs?: num
 function stopDesktopPetRoamAnimation(): void {
   if (desktopPetRoamAnimation) clearInterval(desktopPetRoamAnimation);
   desktopPetRoamAnimation = null;
+  desktopPetIsRoaming = false;
 }
 
 function strollDesktopPet(): void {
@@ -165,6 +173,7 @@ function strollDesktopPet(): void {
   const startedAt = Date.now();
   const duration = 1_400;
   stopDesktopPetRoamAnimation();
+  desktopPetIsRoaming = true;
   desktopPetRoamAnimation = setInterval(() => {
     if (!desktopPetWindow || desktopPetWindow.isDestroyed() || desktopPetActivityState !== 'idle') {
       stopDesktopPetRoamAnimation();
@@ -176,6 +185,22 @@ function strollDesktopPet(): void {
     if (progress >= 1) stopDesktopPetRoamAnimation();
   }, 32);
   desktopPetRoamAnimation.unref();
+}
+
+function persistDesktopPetBounds(window: BrowserWindow): void {
+  if (desktopPetBoundsSaveTimer) clearTimeout(desktopPetBoundsSaveTimer);
+  desktopPetBoundsSaveTimer = setTimeout(() => {
+    desktopPetBoundsSaveTimer = null;
+    if (!window.isDestroyed()) desktopPetWindowStateRepository.save(window.getBounds());
+  }, 250);
+  desktopPetBoundsSaveTimer.unref();
+}
+
+function evaluateDesktopPetSleep(): void {
+  if (desktopPetActivityState === 'idle' && Date.now() - lastDesktopPetActivityAt >= 10 * 60_000) {
+    stopDesktopPetRoamAnimation();
+    setDesktopPetActivity('sleeping');
+  }
 }
 
 function syncDesktopPetRoaming(enabled: boolean): void {
@@ -873,6 +898,7 @@ function loadRendererWindow(window: BrowserWindow, pet = false): void {
 }
 
 function focusMainWindow(): void {
+  if (desktopPetActivityState === 'sleeping') setDesktopPetActivity('waving', 2_400);
   if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
   if (mainWindow?.isMinimized()) mainWindow.restore();
   mainWindow?.show();
@@ -880,8 +906,11 @@ function focusMainWindow(): void {
 }
 
 function createDesktopPetWindow(): BrowserWindow {
+  const savedBounds = desktopPetWindowStateRepository.get();
+  const display = savedBounds ? screen.getDisplayMatching(savedBounds) : screen.getPrimaryDisplay();
+  const bounds = fitDesktopPetBounds(savedBounds, display.workArea);
   const window = new BrowserWindow({
-    width: 220, height: 280, minWidth: 180, minHeight: 220,
+    ...bounds, minWidth: 180, minHeight: 220,
     frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
     resizable: true, show: false, hasShadow: false,
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true,
@@ -894,6 +923,10 @@ function createDesktopPetWindow(): BrowserWindow {
     const delta = currentX - previousX;
     previousX = currentX;
     lastDesktopPetMoveAt = Date.now();
+    if (!desktopPetIsRoaming) {
+      lastDesktopPetActivityAt = Date.now();
+      if (desktopPetActivityState === 'sleeping') setDesktopPetActivity('idle');
+    }
     if (Math.abs(delta) >= 1) emitDesktopPetState(delta > 0 ? 'running-right' : 'running-left');
     if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
     desktopPetMoveTimer = setTimeout(() => {
@@ -901,10 +934,17 @@ function createDesktopPetWindow(): BrowserWindow {
       emitDesktopPetState(desktopPetActivityState);
     }, 180);
     desktopPetMoveTimer.unref();
+    persistDesktopPetBounds(window);
+  });
+  window.on('resize', () => persistDesktopPetBounds(window));
+  window.on('close', () => {
+    if (!window.isDestroyed()) desktopPetWindowStateRepository.save(window.getBounds());
   });
   window.once('ready-to-show', () => window.showInactive());
   window.once('closed', () => {
     if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
+    if (desktopPetBoundsSaveTimer) clearTimeout(desktopPetBoundsSaveTimer);
+    desktopPetBoundsSaveTimer = null;
     desktopPetMoveTimer = null;
     if (desktopPetWindow === window) desktopPetWindow = null;
   });
@@ -998,6 +1038,8 @@ void app.whenReady().then(async () => {
     void evaluateCompanionPrompt().catch((error: unknown) => logger.warn({ error }, 'Companion prompt evaluation failed'));
   }, 60_000);
   companionTimer.unref();
+  desktopPetSleepTimer = setInterval(evaluateDesktopPetSleep, 60_000);
+  desktopPetSleepTimer.unref();
 
   app.on('activate', () => {
     if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
@@ -1014,6 +1056,8 @@ app.on('before-quit', () => {
   if (desktopPetReactionTimer) clearTimeout(desktopPetReactionTimer);
   if (desktopPetMoveTimer) clearTimeout(desktopPetMoveTimer);
   if (desktopPetRoamTimer) clearInterval(desktopPetRoamTimer);
+  if (desktopPetBoundsSaveTimer) clearTimeout(desktopPetBoundsSaveTimer);
+  if (desktopPetSleepTimer) clearInterval(desktopPetSleepTimer);
   stopDesktopPetRoamAnimation();
   database.close();
 });

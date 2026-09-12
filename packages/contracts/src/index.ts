@@ -212,6 +212,7 @@ export type DesktopPetPack = z.infer<typeof DesktopPetPackSchema>;
 
 export const DesktopPetRuntimeStateSchema = z.enum([
   'idle', 'running-right', 'running-left', 'waving', 'jumping', 'failed', 'waiting', 'running', 'review',
+  'sleeping',
 ]);
 export type DesktopPetRuntimeState = z.infer<typeof DesktopPetRuntimeStateSchema>;
 

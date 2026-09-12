@@ -72,6 +72,7 @@ describe('shared contracts', () => {
 
   it('limits desktop pet runtime states to supported animation rows', () => {
     expect(DesktopPetRuntimeStateSchema.parse('running-left')).toBe('running-left');
-    expect(() => DesktopPetRuntimeStateSchema.parse('sleeping')).toThrow();
+    expect(DesktopPetRuntimeStateSchema.parse('sleeping')).toBe('sleeping');
+    expect(() => DesktopPetRuntimeStateSchema.parse('dancing')).toThrow();
   });
 });

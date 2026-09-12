@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 const migrations = [{
   version: 1,
@@ -246,6 +246,18 @@ const migrations = [{
   sql: `
     ALTER TABLE companion_settings ADD COLUMN desktop_pet_roaming_enabled INTEGER NOT NULL DEFAULT 1
       CHECK(desktop_pet_roaming_enabled IN (0, 1));
+  `,
+}, {
+  version: 10,
+  sql: `
+    CREATE TABLE IF NOT EXISTS desktop_pet_window_state (
+      id TEXT PRIMARY KEY NOT NULL,
+      x INTEGER NOT NULL,
+      y INTEGER NOT NULL,
+      width INTEGER NOT NULL CHECK(width >= 180),
+      height INTEGER NOT NULL CHECK(height >= 220),
+      updated_at TEXT NOT NULL
+    );
   `,
 }] as const;
 
