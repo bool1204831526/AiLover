@@ -68,3 +68,8 @@
 # Memory Center corrections
 
 - Added traceable local correction and soft-delete operations for memory records.
+
+# Consolidated memory persistence
+
+- Added schema 13 storage for long-term insights and their source Episode links.
+- Repeated equivalent insights reinforce existing records instead of creating duplicates.

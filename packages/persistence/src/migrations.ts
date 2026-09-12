@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 13;
 
 const migrations = [{
   version: 1,
@@ -340,6 +340,28 @@ const migrations = [{
     );
     CREATE INDEX IF NOT EXISTS future_intentions_pending
       ON future_intentions(character_id, status, priority DESC);
+  `,
+}, {
+  version: 13,
+  sql: `
+    CREATE TABLE IF NOT EXISTS consolidated_memories (
+      id TEXT PRIMARY KEY NOT NULL,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('semantic_insight', 'relationship_insight', 'self_insight', 'behavior_pattern')),
+      statement TEXT NOT NULL,
+      confidence REAL NOT NULL CHECK(confidence BETWEEN 0 AND 1),
+      importance REAL NOT NULL CHECK(importance BETWEEN 0 AND 1),
+      reinforcement_count INTEGER NOT NULL CHECK(reinforcement_count > 0),
+      status TEXT NOT NULL CHECK(status IN ('active', 'faded', 'superseded')),
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS consolidated_memories_active
+      ON consolidated_memories(character_id, status, importance DESC);
+    CREATE TABLE IF NOT EXISTS consolidated_memory_sources (
+      consolidated_memory_id TEXT NOT NULL REFERENCES consolidated_memories(id) ON DELETE CASCADE,
+      episode_id TEXT NOT NULL REFERENCES episodic_memories(id) ON DELETE CASCADE,
+      PRIMARY KEY(consolidated_memory_id, episode_id)
+    );
   `,
 }] as const;
 

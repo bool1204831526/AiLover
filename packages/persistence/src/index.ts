@@ -15,7 +15,7 @@ import type {
 } from '@ailover/cognition';
 import type { Character, CharacterId, PersonalityTemplateId } from '@ailover/domain';
 import type { EpisodeSource, EpisodicMemoryRepository, MemoryRepository, MemoryType,
-  FutureIntention, StoredEpisode, StoredMemory } from '@ailover/memory';
+  ConsolidatedMemory, FutureIntention, StoredEpisode, StoredMemory } from '@ailover/memory';
 import type { CompanionSettings } from '@ailover/contracts';
 
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
@@ -537,6 +537,50 @@ export class SqliteFutureIntentionRepository {
   }
 }
 
+export class SqliteConsolidatedMemoryRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public async saveOrReinforce(characterId: string, memory: ConsolidatedMemory): Promise<void> {
+    this.database.sqlite.transaction(() => {
+      const existing = this.database.sqlite.prepare(`SELECT id FROM consolidated_memories
+        WHERE character_id = ? AND type = ? AND statement = ? AND status = 'active' LIMIT 1`)
+        .get(characterId, memory.type, memory.statement) as { id: string } | undefined;
+      const id = existing?.id ?? memory.id;
+      if (!existing) {
+        this.database.sqlite.prepare(`INSERT INTO consolidated_memories(id, character_id, type,
+          statement, confidence, importance, reinforcement_count, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, characterId, memory.type, memory.statement,
+          memory.confidence, memory.importance, memory.reinforcementCount, memory.status,
+          memory.createdAt.toISOString());
+      }
+      let added = 0;
+      for (const episodeId of memory.sourceEpisodeIds) {
+        added += this.database.sqlite.prepare(`INSERT OR IGNORE INTO consolidated_memory_sources(
+          consolidated_memory_id, episode_id) VALUES (?, ?)`).run(id, episodeId).changes;
+      }
+      if (existing && added) this.database.sqlite.prepare(`UPDATE consolidated_memories SET
+        reinforcement_count = reinforcement_count + ?, confidence = MAX(confidence, ?),
+        importance = MAX(importance, ?) WHERE id = ?`).run(added, memory.confidence, memory.importance, id);
+    })();
+  }
+
+  public async listActive(characterId: string): Promise<ConsolidatedMemory[]> {
+    const rows = this.database.sqlite.prepare(`SELECT * FROM consolidated_memories
+      WHERE character_id = ? AND status = 'active' ORDER BY importance DESC, created_at DESC`)
+      .all(characterId) as ConsolidatedMemoryRow[];
+    const sources = this.database.sqlite.prepare(`SELECT episode_id FROM consolidated_memory_sources
+      WHERE consolidated_memory_id = ?`);
+    return rows.map((row) => ({ id: row.id, type: row.type as ConsolidatedMemory['type'],
+      statement: row.statement, confidence: row.confidence, importance: row.importance,
+      sourceEpisodeIds: (sources.all(row.id) as { episode_id: string }[]).map(({ episode_id }) => episode_id),
+      createdAt: new Date(row.created_at), reinforcementCount: row.reinforcement_count,
+      status: row.status as ConsolidatedMemory['status'] }));
+  }
+}
+
+type ConsolidatedMemoryRow = { id: string; type: string; statement: string; confidence: number;
+  importance: number; reinforcement_count: number; status: string; created_at: string };
+
 type FutureIntentionRow = { id: string; description: string; trigger_type: string; trigger_data: string;
   priority: number; source_memory_ids: string; status: string; created_at: string; expires_at: string | null };
 
@@ -763,5 +807,5 @@ function parseStringArray(value: string): string[] {
 
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories, episodicMemories,
-  desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
+  consolidatedMemories, desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections,
   relationshipStates, users } from './schema';

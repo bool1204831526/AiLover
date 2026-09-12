@@ -177,3 +177,10 @@ export const futureIntentions = sqliteTable('future_intentions', {
   sourceMemoryIds: text('source_memory_ids').notNull(), status: text('status').notNull(),
   createdAt: text('created_at').notNull(), expiresAt: text('expires_at'),
 });
+
+export const consolidatedMemories = sqliteTable('consolidated_memories', {
+  id: text('id').primaryKey(), characterId: text('character_id').notNull().references(() => characters.id),
+  type: text('type').notNull(), statement: text('statement').notNull(), confidence: real('confidence').notNull(),
+  importance: real('importance').notNull(), reinforcementCount: integer('reinforcement_count').notNull(),
+  status: text('status').notNull(), createdAt: text('created_at').notNull(),
+});

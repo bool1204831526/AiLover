@@ -7,13 +7,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createCharacter } from '@ailover/domain';
 import { CognitionService } from '@ailover/cognition';
-import { EpisodicMemoryService, MemoryService, type FutureIntention } from '@ailover/memory';
+import { EpisodicMemoryService, MemoryService, type ConsolidatedMemory, type FutureIntention } from '@ailover/memory';
 
 import {
   openAppDatabase, SqliteCharacterRepository, SqliteConversationRepository, SqliteModelProfileRepository,
   SqliteCognitionRepository, SqliteMemoryRepository, SqliteVisualAssetRepository,
   SqliteEpisodicMemoryRepository,
   SqliteFutureIntentionRepository,
+  SqliteConsolidatedMemoryRepository,
   SqliteCompanionSettingsRepository,
   SqliteDesktopPetWindowStateRepository,
   createSanitizedDatabaseSnapshot, prepareRestoredDatabase, validateRestoredDatabase,
@@ -73,7 +74,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(12);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(13);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -341,6 +342,24 @@ describe('SqliteCognitionRepository', () => {
     await repository.expireBefore('character-1', new Date('2026-09-14'));
     expect(database.sqlite.prepare('SELECT status FROM future_intentions WHERE id = ?').get('intention-expired'))
       .toEqual({ status: 'expired' });
+    database.close();
+  });
+
+  it('persists and restores consolidated memories', async () => {
+    const path = join(tmpdir(), `ailover-consolidated-${randomUUID()}.sqlite`);
+    paths.push(path);
+    const database = openAppDatabase(path);
+    database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
+      speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('character-consolidated', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
+    const repository = new SqliteConsolidatedMemoryRepository(database);
+    const insight: ConsolidatedMemory = { id: 'insight-1', type: 'behavior_pattern',
+      statement: '用户倾向于一起准备重要事项。', confidence: 0.8, importance: 0.75,
+      sourceEpisodeIds: [], createdAt: new Date('2026-09-12'), reinforcementCount: 2, status: 'active' };
+    await repository.saveOrReinforce('character-consolidated', insight);
+    expect((await repository.listActive('character-consolidated'))[0]).toMatchObject({
+      id: 'insight-1', statement: insight.statement, reinforcementCount: 2,
+    });
     database.close();
   });
 });
