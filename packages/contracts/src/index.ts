@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   chatCancel: 'chat:cancel',
   chatStream: 'chat:stream',
   relationshipGetSummary: 'relationship:get-summary',
+  memoryList: 'memory:list',
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
@@ -298,6 +299,16 @@ export const BootstrapResponseSchema = z.object({
 
 export type BootstrapResponse = z.infer<typeof BootstrapResponseSchema>;
 
+export const MemoryCenterEntrySchema = z.object({
+  id: z.string().min(1), type: z.enum(['semantic', 'preference', 'plan', 'episodic', 'relationship']),
+  subject: z.string(), content: z.string(), confidence: z.number().min(0).max(1),
+  importance: z.number().min(0).max(1), state: z.enum(['active', 'superseded', 'expired']),
+  firstSeenAt: z.iso.datetime(), lastSeenAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime().nullable(), evidence: z.string(),
+});
+export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);
+export type MemoryCenterEntry = z.infer<typeof MemoryCenterEntrySchema>;
+
 export interface AiLoverDesktopApi {
   bootstrap(): Promise<BootstrapResponse>;
   character: {
@@ -322,6 +333,7 @@ export interface AiLoverDesktopApi {
   relationship: {
     getSummary(): Promise<RelationshipSummary | null>;
   };
+  memory: { list(): Promise<MemoryCenterEntry[]> };
   visuals: {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;

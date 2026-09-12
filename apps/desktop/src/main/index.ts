@@ -24,7 +24,7 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
-import { EpisodicMemoryService, MemoryService, type RecalledEpisode,
+import { buildMemoryCenterEntries, EpisodicMemoryService, MemoryService, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
@@ -70,7 +70,8 @@ const modelProfileRepository = new SqliteModelProfileRepository(database);
 const conversationRepository = new SqliteConversationRepository(database);
 const companionSettingsRepository = new SqliteCompanionSettingsRepository(database);
 const desktopPetWindowStateRepository = new SqliteDesktopPetWindowStateRepository(database);
-const memoryService = new MemoryService({ repository: new SqliteMemoryRepository(database),
+const memoryRepository = new SqliteMemoryRepository(database);
+const memoryService = new MemoryService({ repository: memoryRepository,
   idGenerator: { next: randomUUID } });
 const episodicMemoryService = new EpisodicMemoryService({
   repository: new SqliteEpisodicMemoryRepository(database), idGenerator: { next: randomUUID },
@@ -461,6 +462,15 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.characterGetCurrent, async () => {
     const current = await characterService.findCurrent();
     return current ? toCharacterSnapshot(current) : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.memoryList, async () => {
+    const current = await characterService.findCurrent();
+    if (!current) return [];
+    const memories = await memoryRepository.listActive(current.id);
+    return buildMemoryCenterEntries(memories).map((memory) => ({ ...memory,
+      firstSeenAt: memory.firstSeenAt.toISOString(), lastSeenAt: memory.lastSeenAt.toISOString(),
+      expiresAt: memory.expiresAt?.toISOString() ?? null }));
   });
 
   ipcMain.handle(IPC_CHANNELS.characterCreate, async (_event, input: unknown) => {
