@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decayedStrength, EpisodicMemoryService, extractEpisodeCandidate, extractMemoryCandidates,
-  MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
+  consolidateEpisodes, MemoryService, type EpisodeSource, type EpisodicMemoryRepository, type MemoryRepository,
   type MemoryType, type StoredEpisode, type StoredMemory,
 } from './index';
 
@@ -190,5 +190,29 @@ describe('EpisodicMemoryService', () => {
       query: '还记得我们第一次一起完成项目吗', now: new Date('2026-09-12T00:00:00Z') });
     expect(recalled).toHaveLength(3);
     expect(repository.recalls).toHaveLength(3);
+  });
+
+  it('consolidates repeated compatible episodes with traceable sources', async () => {
+    const repository = new InMemoryEpisodeRepository();
+    const service = new EpisodicMemoryService({ repository,
+      idGenerator: { next: () => `episode-${repository.episodes.length + 1}` } });
+    await service.capture({ ...base, userMessageId: 'message-a', userText: '我们一起完成了项目准备' });
+    await service.capture({ ...base, userMessageId: 'message-b', userText: '我们一起成功完成了面试准备' });
+    const insights = consolidateEpisodes(repository.episodes, { next: () => 'insight-1' }, base.now);
+    expect(insights).toHaveLength(1);
+    expect(insights[0]?.type).toBe('behavior_pattern');
+    expect(insights[0]?.sourceEpisodeIds).toHaveLength(2);
+    expect(insights[0]?.confidence).toBeGreaterThan(0.7);
+  });
+
+  it('does not consolidate a single episode or incompatible conflict and repair pair', async () => {
+    const baseEpisode = extractEpisodeCandidate({ ...base, userText: '这是我们第一次见面' });
+    const conflict = extractEpisodeCandidate({ ...base, userText: '你骗我了，我很生气' });
+    const repair = extractEpisodeCandidate({ ...base, userText: '对不起，我们和好吧' });
+    const stored = [baseEpisode, conflict, repair].map((candidate, index) => ({ ...candidate!,
+      id: `episode-${index}`, characterId: base.characterId, conversationId: base.conversationId,
+      eventTime: base.now, createdAt: base.now, reinforcementCount: 1, status: 'active' as const,
+      sourceMessageIds: [`message-${index}`], relatedMemoryIds: [], lastRecalledAt: null }));
+    expect(consolidateEpisodes(stored, { next: () => 'insight' }, base.now)).toHaveLength(0);
   });
 });

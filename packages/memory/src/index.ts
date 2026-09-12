@@ -401,6 +401,53 @@ export function scoreEpisode(
     0.04 * reinforcement + (memoryCue ? 0.02 : 0);
 }
 
+export type ConsolidatedMemoryType =
+  | 'semantic_insight' | 'relationship_insight' | 'self_insight' | 'behavior_pattern';
+
+export type ConsolidatedMemory = {
+  id: string;
+  type: ConsolidatedMemoryType;
+  statement: string;
+  confidence: number;
+  importance: number;
+  sourceEpisodeIds: string[];
+  createdAt: Date;
+  reinforcementCount: number;
+  status: 'active' | 'faded' | 'superseded';
+};
+
+export function consolidateEpisodes(
+  episodes: StoredEpisode[],
+  idGenerator: { next(): string },
+  now: Date,
+): ConsolidatedMemory[] {
+  const active = episodes.filter((episode) => episode.status === 'active' && episode.importance >= 0.65);
+  const groups = new Map<string, StoredEpisode[]>();
+  for (const episode of active) {
+    const key = episode.kind === 'conflict' || episode.kind === 'repair' ? 'relationship' :
+      episode.kind === 'shared-achievement' ? 'achievement' : episode.kind;
+    groups.set(key, [...(groups.get(key) ?? []), episode]);
+  }
+  const results: ConsolidatedMemory[] = [];
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    if (key === 'relationship' && new Set(group.map(({ kind }) => kind)).size > 1) continue;
+    const sourceEpisodeIds = group.map(({ id }) => id);
+    const type: ConsolidatedMemoryType = key === 'relationship' ? 'relationship_insight'
+      : key === 'achievement' ? 'behavior_pattern' : 'semantic_insight';
+    const statement = key === 'relationship'
+      ? '我们经历过重要的关系变化，彼此的互动会影响信任和相处方式。'
+      : key === 'achievement'
+        ? '用户倾向于在重要事项上与 AiLover 一起准备、推进并完成。'
+        : '用户曾多次表达或经历相近的事情，这可能构成稳定的长期模式。';
+    results.push({ id: idGenerator.next(), type, statement,
+      confidence: Math.min(0.92, 0.62 + group.length * 0.08),
+      importance: Math.min(0.9, 0.62 + Math.max(...group.map(({ importance }) => importance)) * 0.25),
+      sourceEpisodeIds, createdAt: now, reinforcementCount: group.length, status: 'active' });
+  }
+  return results;
+}
+
 function episodeEmotion(text: string): string | null {
   if (/(开心|高兴|成功|完成)/.test(text)) return '积极';
   if (/(难过|失望|崩溃|挫折)/.test(text)) return '低落';
