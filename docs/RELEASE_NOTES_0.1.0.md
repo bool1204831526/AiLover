@@ -74,3 +74,4 @@
 
 - Added schema 13 storage for long-term insights and their source Episode links.
 - Repeated equivalent insights reinforce existing records instead of creating duplicates.
+- Integrated automatic post-Episode consolidation and bounded insight recall into the chat lifecycle.

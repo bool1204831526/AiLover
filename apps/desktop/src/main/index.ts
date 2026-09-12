@@ -26,7 +26,7 @@ import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendC
   type StoredConversation } from '@ailover/application';
 import { createCharacter, type Character } from '@ailover/domain';
 import { advanceFutureIntentions, buildMemoryCenterEntries, EpisodicMemoryService,
-  intentionsFromMemories, MemoryService, type RecalledEpisode,
+  consolidateEpisodes, intentionsFromMemories, MemoryService, type ConsolidatedMemory, type RecalledEpisode,
   type RecalledMemory } from '@ailover/memory';
 import { inferImageCapabilities, ModelGatewayError, probeModelProvider,
   streamModelChat } from '@ailover/model-gateway';
@@ -35,6 +35,7 @@ import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabas
   SqliteCharacterRepository, SqliteCognitionRepository, SqliteConversationRepository,
   SqliteMemoryRepository, SqliteModelProfileRepository, SqliteCompanionSettingsRepository,
   SqliteEpisodicMemoryRepository,
+  SqliteConsolidatedMemoryRepository,
   SqliteFutureIntentionRepository,
   SqliteDesktopPetWindowStateRepository,
   validateRestoredDatabase } from '@ailover/persistence';
@@ -77,9 +78,11 @@ const memoryRepository = new SqliteMemoryRepository(database);
 const futureIntentionRepository = new SqliteFutureIntentionRepository(database);
 const memoryService = new MemoryService({ repository: memoryRepository,
   idGenerator: { next: randomUUID } });
+const episodicMemoryRepository = new SqliteEpisodicMemoryRepository(database);
 const episodicMemoryService = new EpisodicMemoryService({
-  repository: new SqliteEpisodicMemoryRepository(database), idGenerator: { next: randomUUID },
+  repository: episodicMemoryRepository, idGenerator: { next: randomUUID },
 });
+const consolidatedMemoryRepository = new SqliteConsolidatedMemoryRepository(database);
 const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
@@ -856,6 +859,12 @@ async function completeChat(
       { returned: !isFirstConversationTurn, text: userMessage.content });
     const triggeredIntentions = advancedIntentions.filter(({ status }) => status === 'triggered');
     triggeredIntentionIds = triggeredIntentions.map(({ id }) => id);
+    let consolidatedMemories: ConsolidatedMemory[] = [];
+    try {
+      consolidatedMemories = await consolidatedMemoryRepository.listActive(character.id);
+    } catch (error) {
+      logger.warn({ error }, 'Consolidated memory recall failed; continuing without insights');
+    }
     let recalled: RecalledMemory[] = [];
     try {
       recalled = await memoryService.recall({ characterId: character.id, queryMessageId: userMessage.id,
@@ -886,9 +895,11 @@ async function completeChat(
       ? `当前自我认识：\n- ${responsePlan.selfProjection.join('\n- ')}` : '';
     const intentionContext = triggeredIntentions.length
       ? `可以自然关心但不要假设结果：\n- ${triggeredIntentions.map(({ description }) => description).join('\n- ')}` : '';
+    const insightContext = consolidatedMemories.length
+      ? `从多次真实经历中形成的谨慎认识，仅在相关时参考：\n- ${consolidatedMemories.slice(0, 4).map(({ statement }) => statement).join('\n- ')}` : '';
     const cognitionContext = [projectCognition(cognition),
       `回复语气：${responsePlan.tone.join('、')}。${responsePlan.guidance}`,
-      personalityContext, selfContext, intentionContext].filter(Boolean).join('\n');
+      personalityContext, selfContext, intentionContext, insightContext].filter(Boolean).join('\n');
     episodeEmotion = projectCognition(cognition);
     const profile = await modelProfileRepository.get();
     if (!profile) throw new ModelGatewayError('请先在设置中配置聊天模型。', false);
@@ -943,8 +954,9 @@ async function completeChat(
     } catch (error) {
       logger.warn({ error }, 'Memory capture failed');
     }
+    let capturedEpisode = null;
     try {
-      await episodicMemoryService.capture({ characterId: character.id, characterName: character.name,
+      capturedEpisode = await episodicMemoryService.capture({ characterId: character.id, characterName: character.name,
         conversationId: assistantMessage.conversationId, userMessageId: userMessage.id,
         userText: userMessage.content, ...(completedSuccessfully
           ? { aiMessageId: assistantMessage.id, aiText: content } : {}),
@@ -953,6 +965,17 @@ async function completeChat(
         now: userMessage.createdAt });
     } catch (error) {
       logger.warn({ error }, 'Episode capture failed');
+    }
+    if (capturedEpisode) {
+      try {
+        const episodes = await episodicMemoryRepository.searchCandidates(character.id, '', true, 100);
+        const insights = consolidateEpisodes(episodes, { next: randomUUID }, userMessage.createdAt);
+        for (const insight of insights) {
+          await consolidatedMemoryRepository.saveOrReinforce(character.id, insight);
+        }
+      } catch (error) {
+        logger.warn({ error }, 'Memory consolidation failed');
+      }
     }
     activeChats.delete(requestId);
   }
