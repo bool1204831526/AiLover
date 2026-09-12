@@ -5,7 +5,7 @@ import type { PersonalityValues } from '@ailover/domain';
 import {
   analyzeInteraction, applyEmotionalAssociations, COGNITION_RULE_VERSION, CognitionService, decaySnapshot,
   createResponsePlan, projectPersonality, projectSelfModel, type CognitionRepository, type CognitionSnapshot, type EvolutionEvidence,
-  type ReflectionRecord,
+  summarizePersonalityEvidence, type ReflectionRecord,
 } from './index';
 
 const baseline: PersonalityValues = { warmth: 0.7, energy: 0.5, reserve: 0.4,
@@ -33,6 +33,17 @@ describe('emotional associations', () => {
     expect(result.security).toBeGreaterThan(currentSnapshot().emotion.security);
     expect(Object.values(result).every((value) => value >= 0 && value <= 1)).toBe(true);
   });
+});
+
+it('summarizes personality evidence with recent explanations', () => {
+  const evidence: EvolutionEvidence[] = [
+    { characterId: 'character-1', trait: 'initiative', direction: 1, sourceMessageId: 'old', reason: '欢迎主动安排', recordedAt: new Date('2026-09-01') },
+    { characterId: 'character-1', trait: 'initiative', direction: 1, sourceMessageId: 'new', reason: '鼓励主动提议', recordedAt: new Date('2026-09-11') },
+    { characterId: 'character-1', trait: 'warmth', direction: -1, sourceMessageId: 'other', reason: '希望克制', recordedAt: new Date('2026-09-10') },
+  ];
+  const result = summarizePersonalityEvidence(evidence, 'initiative');
+  expect(result[0]).toMatchObject({ trait: 'initiative', positive: 2, negative: 0, total: 2 });
+  expect(result[0]?.latest[0]?.sourceMessageId).toBe('new');
 });
 
 class MemoryCognitionRepository implements CognitionRepository {

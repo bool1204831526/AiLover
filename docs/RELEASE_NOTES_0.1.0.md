@@ -55,3 +55,7 @@
 
 - Added a local bounded projection for emotional echoes from relevant episodic experiences.
 - Associations are limited to three items and never expose raw internal scores to the model.
+
+# Explainable personality evidence
+
+- Added bounded summaries of trait evidence, including positive/negative counts and recent source messages.

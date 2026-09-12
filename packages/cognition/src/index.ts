@@ -77,6 +77,30 @@ export type EvolutionEvidence = {
   recordedAt: Date;
 };
 
+export type PersonalityEvidenceSummary = {
+  trait: PersonalityTrait;
+  positive: number;
+  negative: number;
+  total: number;
+  latest: EvolutionEvidence[];
+};
+
+export function summarizePersonalityEvidence(
+  evidence: EvolutionEvidence[],
+  trait?: PersonalityTrait,
+): PersonalityEvidenceSummary[] {
+  const grouped = new Map<PersonalityTrait, EvolutionEvidence[]>();
+  for (const item of evidence.filter((item) => !trait || item.trait === trait)) {
+    grouped.set(item.trait, [...(grouped.get(item.trait) ?? []), item]);
+  }
+  return [...grouped.entries()].map(([key, items]) => ({ trait: key,
+    positive: items.filter((item) => item.direction > 0).length,
+    negative: items.filter((item) => item.direction < 0).length,
+    total: items.length,
+    latest: [...items].sort((a, b) => b.recordedAt.getTime() - a.recordedAt.getTime()).slice(0, 5),
+  })).sort((a, b) => b.total - a.total);
+}
+
 export type ReflectionRecord = {
   id: string;
   characterId: string;
