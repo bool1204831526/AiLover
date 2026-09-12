@@ -315,6 +315,9 @@ describe('SqliteCognitionRepository', () => {
       direction: 1, sourceMessageId: 'cognition-message', reason: 'test evidence', recordedAt: at })).toBe(1);
     expect(await cognitionRepository.addEvidence({ characterId: character.id, trait: 'initiative',
       direction: 1, sourceMessageId: 'cognition-message', reason: 'duplicate', recordedAt: at })).toBe(1);
+    expect((await cognitionRepository.listEvidence(character.id))[0]).toMatchObject({
+      trait: 'initiative', sourceMessageId: 'cognition-message', reason: 'test evidence',
+    });
     first.close();
 
     const second = openAppDatabase(path);

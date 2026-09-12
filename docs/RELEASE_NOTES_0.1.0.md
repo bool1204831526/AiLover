@@ -59,6 +59,7 @@
 # Explainable personality evidence
 
 - Added bounded summaries of trait evidence, including positive/negative counts and recent source messages.
+- Added current-character database queries and a relationship-page explanation view without exposing trait scores.
 
 # Future intention lifecycle
 

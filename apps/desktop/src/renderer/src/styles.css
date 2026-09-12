@@ -1093,6 +1093,12 @@ button:disabled {
 .relationship-timeline time { color: #777a7e; font-size: 12px; padding-top: 2px; }
 .relationship-timeline li div { display: flex; flex-direction: column; gap: 4px; padding-bottom: 18px; }
 .relationship-timeline li span { color: #777a7e; font-size: 12px; }
+.personality-evidence { margin-top: 26px; max-width: 760px; }
+.evidence-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 16px; }
+.evidence-list article { padding: 14px 16px; border: 1px solid #d8d4ce; border-radius: 8px; background: #fbfaf8; }
+.evidence-list article > div { display: flex; justify-content: space-between; gap: 10px; }
+.evidence-list span, .evidence-list small { color: #777a7e; font-size: 12px; }
+.evidence-list p { margin: 9px 0; line-height: 1.5; }
 
 .memory-page { overflow: auto; padding: 24px 28px 40px; }
 .memory-list { display: grid; gap: 12px; max-width: 760px; }

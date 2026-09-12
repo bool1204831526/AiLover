@@ -20,7 +20,7 @@ import {
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, createSelfModelEntries, projectCognition,
-  relationshipSummary } from '@ailover/cognition';
+  relationshipSummary, summarizePersonalityEvidence } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, fitDesktopPetBounds, shouldSendCompanionPrompt,
   readPngDimensions, readWebPDimensions, type StoredChatMessage,
   type StoredConversation } from '@ailover/application';
@@ -86,7 +86,8 @@ const episodicMemoryService = new EpisodicMemoryService({
 });
 const consolidatedMemoryRepository = new SqliteConsolidatedMemoryRepository(database);
 const selfModelRepository = new SqliteSelfModelRepository(database);
-const cognitionService = new CognitionService(new SqliteCognitionRepository(database),
+const cognitionRepository = new SqliteCognitionRepository(database);
+const cognitionService = new CognitionService(cognitionRepository,
   { next: randomUUID });
 const visualAssetRepository = new SqliteVisualAssetRepository(database);
 const assetRoot = join(userDataPath, 'assets');
@@ -646,6 +647,14 @@ function registerIpcHandlers(): void {
     const episodes = await episodicMemoryRepository.searchCandidates(current.id, '', true, 100);
     return buildRelationshipTimeline(episodes).map((milestone) => ({ ...milestone,
       occurredAt: milestone.occurredAt.toISOString() }));
+  });
+  ipcMain.handle(IPC_CHANNELS.personalityEvidenceGet, async () => {
+    const current = await characterService.findCurrent();
+    if (!current) return [];
+    const evidence = await cognitionRepository.listEvidence(current.id);
+    return summarizePersonalityEvidence(evidence).map((summary) => ({ ...summary,
+      latest: summary.latest.map(({ direction, sourceMessageId, reason, recordedAt }) =>
+        ({ direction, sourceMessageId, reason, recordedAt: recordedAt.toISOString() })) }));
   });
 
   ipcMain.handle(IPC_CHANNELS.characterVisualGet, async () => {

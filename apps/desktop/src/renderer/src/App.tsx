@@ -11,6 +11,7 @@ import type {
   RelationshipSummary, CompanionSettings,
   MemoryCenterEntry,
   RelationshipMilestone,
+  PersonalityEvidenceSummary,
   DesktopPetPack,
 } from '@ailover/contracts';
 import { retainRecentMessages } from '@ailover/application';
@@ -290,15 +291,20 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
 function RelationshipView({ character }: { character: CharacterSnapshot | null }): React.JSX.Element {
   const [summary, setSummary] = useState<RelationshipSummary | null>(null);
   const [timeline, setTimeline] = useState<RelationshipMilestone[]>([]);
+  const [evidence, setEvidence] = useState<PersonalityEvidenceSummary[]>([]);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setSummary(null);
     setTimeline([]);
+    setEvidence([]);
     setFailed(false);
     if (!character || !window.ailover) return;
-    void Promise.all([window.ailover.relationship.getSummary(), window.ailover.relationship.getTimeline()])
-      .then(([nextSummary, nextTimeline]) => { setSummary(nextSummary); setTimeline(nextTimeline); })
+    void Promise.all([window.ailover.relationship.getSummary(), window.ailover.relationship.getTimeline(),
+      window.ailover.personality.getEvidence()])
+      .then(([nextSummary, nextTimeline, nextEvidence]) => {
+        setSummary(nextSummary); setTimeline(nextTimeline); setEvidence(nextEvidence);
+      })
       .catch(() => setFailed(true));
   }, [character?.id]);
 
@@ -320,7 +326,19 @@ function RelationshipView({ character }: { character: CharacterSnapshot | null }
           <div><strong>{milestone.title}</strong><span>{milestoneLabel(milestone.kind)}</span></div>
         </li>)}</ol>
       </section>}
+      {character && !failed && evidence.length > 0 && <section className="personality-evidence">
+        <div className="settings-heading"><h3>性格形成依据</h3><p>长期互动中逐渐积累的表达倾向。</p></div>
+        <div className="evidence-list">{evidence.map((item) => <article key={item.trait}>
+          <div><strong>{personalityTraitLabel(item.trait)}</strong><span>{item.total} 条依据</span></div>
+          <p>{item.latest[0]?.reason}</p><small>最近记录于 {item.latest[0] ? new Date(item.latest[0].recordedAt).toLocaleDateString('zh-CN') : '未知'}</small>
+        </article>)}</div>
+      </section>}
     </div></>;
+}
+
+function personalityTraitLabel(trait: PersonalityEvidenceSummary['trait']): string {
+  return ({ warmth: '温暖关怀', energy: '活力', reserve: '克制', playfulness: '轻松幽默',
+    maturity: '成熟稳重', rationality: '理性分析', initiative: '主动性' })[trait];
 }
 
 function milestoneLabel(kind: RelationshipMilestone['kind']): string {

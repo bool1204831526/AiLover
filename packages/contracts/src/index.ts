@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   chatStream: 'chat:stream',
   relationshipGetSummary: 'relationship:get-summary',
   relationshipGetTimeline: 'relationship:get-timeline',
+  personalityEvidenceGet: 'personality-evidence:get',
   memoryList: 'memory:list',
   memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete',
   characterVisualGet: 'character-visual:get',
@@ -308,6 +309,14 @@ export const RelationshipMilestoneSchema = z.object({
 });
 export const RelationshipTimelineSchema = z.array(RelationshipMilestoneSchema);
 export type RelationshipMilestone = z.infer<typeof RelationshipMilestoneSchema>;
+const PersonalityTraitSchema = z.enum(['warmth', 'energy', 'reserve', 'playfulness', 'maturity', 'rationality', 'initiative']);
+export const PersonalityEvidenceSummarySchema = z.object({
+  trait: PersonalityTraitSchema, positive: z.number().int().nonnegative(), negative: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(), latest: z.array(z.object({ direction: z.union([z.literal(-1), z.literal(1)]),
+    sourceMessageId: z.string().min(1), reason: z.string().min(1), recordedAt: z.iso.datetime() })),
+});
+export const PersonalityEvidenceSummariesSchema = z.array(PersonalityEvidenceSummarySchema);
+export type PersonalityEvidenceSummary = z.infer<typeof PersonalityEvidenceSummarySchema>;
 
 export const MemoryCenterEntrySchema = z.object({
   id: z.string().min(1), type: z.enum(['semantic', 'preference', 'plan', 'episodic', 'relationship']),
@@ -346,6 +355,7 @@ export interface AiLoverDesktopApi {
     getSummary(): Promise<RelationshipSummary | null>;
     getTimeline(): Promise<RelationshipMilestone[]>;
   };
+  personality: { getEvidence(): Promise<PersonalityEvidenceSummary[]> };
   memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>; delete(id: string): Promise<void> };
   visuals: {
     get(): Promise<CharacterVisualProfile | null>;

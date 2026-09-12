@@ -808,6 +808,16 @@ export class SqliteCognitionRepository implements CognitionRepository {
     return result.count;
   }
 
+  public async listEvidence(characterId: string, limit = 100): Promise<EvolutionEvidence[]> {
+    const rows = this.database.sqlite.prepare(`SELECT trait, direction, source_message_id, reason, recorded_at
+      FROM personality_evidence WHERE character_id = ? ORDER BY recorded_at DESC, id DESC LIMIT ?`)
+      .all(characterId, limit) as { trait: string; direction: number; source_message_id: string;
+        reason: string; recorded_at: string }[];
+    return rows.map((row) => ({ characterId, trait: row.trait as EvolutionEvidence['trait'],
+      direction: row.direction as EvolutionEvidence['direction'], sourceMessageId: row.source_message_id,
+      reason: row.reason, recordedAt: new Date(row.recorded_at) }));
+  }
+
   public async saveReflection(reflection: ReflectionRecord): Promise<void> {
     this.database.sqlite.prepare(`INSERT INTO reflections(id, character_id, trigger_message_id,
       summary, importance, rule_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
