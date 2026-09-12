@@ -119,6 +119,9 @@ body:has(.desktop-pet-shell),
 .pet-action-greet { transform-origin: 50% 90%; animation: pet-greet 0.55s ease-in-out 4; }
 .pet-action-thinking { animation: pet-sway 1.7s ease-in-out 2; }
 .pet-action-sleep { animation: pet-sleep 3s ease-in-out 2; }
+.pet-character:hover .pet-portrait:not(.pet-sprite-viewport) { animation: pet-hover 0.9s ease-in-out infinite; }
+.pet-character:hover .pet-sprite-viewport { transform: translateY(-2px); }
+.pet-character:focus-visible { outline: 2px solid #a94756; outline-offset: 4px; border-radius: 6px; }
 
 @keyframes pet-breathe {
   0%, 100% { transform: translateY(0) scale(1); }
@@ -130,6 +133,7 @@ body:has(.desktop-pet-shell),
 @keyframes pet-walk-left { 0% { transform: translateX(20px); } 100% { transform: translateX(-20px); } }
 @keyframes pet-walk-right { 0% { transform: translateX(-20px); } 100% { transform: translateX(20px); } }
 @keyframes pet-sleep { 0%, 100% { transform: translateY(0) scale(1); opacity: 1; } 50% { transform: translateY(5px) scale(0.98); opacity: 0.88; } }
+@keyframes pet-hover { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-3px) scale(1.015); } }
 
 * {
   box-sizing: border-box;

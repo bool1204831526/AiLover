@@ -36,6 +36,7 @@ function DesktopPet(): React.JSX.Element {
   const [quickDraft, setQuickDraft] = useState('');
   const [petChatRequestId, setPetChatRequestId] = useState<string | null>(null);
   const [speech, setSpeech] = useState('');
+  const [hovered, setHovered] = useState(false);
   useEffect(() => {
     const api = window.ailover;
     if (!api) return;
@@ -81,6 +82,11 @@ function DesktopPet(): React.JSX.Element {
     const timer = window.setTimeout(() => setSpeech(''), 12_000);
     return () => window.clearTimeout(timer);
   }, [speech, quickChatOpen, petChatRequestId]);
+  useEffect(() => {
+    if (!hovered || petState !== 'idle' || speech || quickChatOpen) return;
+    const timer = window.setTimeout(() => setSpeech('嗯？我在这里。'), 650);
+    return () => window.clearTimeout(timer);
+  }, [hovered, petState, speech, quickChatOpen]);
   const action = legacyPetActions[petState];
   const atlasAnimation = atlasPetAnimations[petState];
   const actionImage = petPack?.actionDataUrls[action] ?? petPack?.actionDataUrls.idle;
@@ -118,7 +124,15 @@ function DesktopPet(): React.JSX.Element {
     <button className="pet-close" type="button" title="关闭桌面角色" aria-label="关闭桌面角色"
       onClick={() => void window.ailover?.companion.closeDesktopPet()}><X size={15} /></button>
     <div className={`pet-character${petPack?.mode === 'actions' ? ` pet-action-${action}` : ''}`}
-      title="拖动桌面角色" onDoubleClick={() => void window.ailover?.companion.focusMain()}>
+      title="拖动桌面角色" role="button" tabIndex={0}
+      onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}
+      onDoubleClick={() => void window.ailover?.companion.focusMain()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          void window.ailover?.companion.interactPet();
+        }
+      }}>
       <div className={`pet-portrait${petPack?.mode !== 'actions' && petPack ? ' pet-sprite-viewport' : ''}`}>{petPack?.mode !== 'actions' && petPack?.atlas
         ? <img className="pet-spritesheet" src={petPack.atlas.dataUrl} alt={character?.name ?? '角色'}
           style={{ height: `${petPack.atlas.spriteVersionNumber === 2 ? 1100 : 900}%`,

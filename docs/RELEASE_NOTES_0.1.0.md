@@ -19,6 +19,7 @@
 - Optional screen-bounded idle roaming, direct pet interaction, double-click opening and a pet context menu.
 - Persistent pet position and size, multi-display visibility recovery and an inactivity sleep state.
 - Synchronized compact desktop-pet chat with streamed reply bubbles and cross-window message updates.
+- Hover and keyboard interaction feedback for the desktop pet without interrupting active chat states.
 
 ## Privacy
 
