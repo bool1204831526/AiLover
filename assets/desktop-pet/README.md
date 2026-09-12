@@ -3,7 +3,27 @@
 Place optional approved desktop-pet animation assets in this directory. The application currently
 works without them by animating the imported character portrait.
 
-## Preferred Format
+## Preferred Format: Codex v2 Atlas
+
+Place these two files directly in one folder:
+
+- `pet.json`
+- `spritesheet.webp` (static WebP, not animated)
+
+The atlas must be exactly 1536 x 2288 pixels: 8 columns by 11 rows, with 192 x 208 pixel cells.
+It contains the nine standard Codex animation rows and sixteen clockwise look directions. Example:
+
+```json
+{
+  "id": "my-pet",
+  "displayName": "My Pet",
+  "description": "A short description",
+  "spriteVersionNumber": 2,
+  "spritesheetPath": "spritesheet.webp"
+}
+```
+
+## Compatible Format: Separate Action Files
 
 - Transparent animated WebP (recommended) or static PNG
 - One complete action per file; do not combine actions into a sprite sheet

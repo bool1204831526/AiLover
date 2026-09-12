@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BootstrapResponseSchema, ChatStreamEventSchema, DomainEventSchema, ModelProfileSnapshotSchema,
-  DesktopPetPackManifestSchema,
+  CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
 } from './index';
 
 describe('shared contracts', () => {
@@ -53,5 +53,13 @@ describe('shared contracts', () => {
       actions: { idle: 'idle.webp', greet: 'greet.webp' } }).actions.idle).toBe('idle.webp');
     expect(() => DesktopPetPackManifestSchema.parse({ version: 1,
       actions: { greet: 'greet.webp' } })).toThrow();
+  });
+
+  it('validates Codex v2 desktop pet packs', () => {
+    const manifest = CodexPetManifestSchema.parse({ id: 'boba', displayName: 'Boba',
+      spriteVersionNumber: 2, spritesheetPath: 'spritesheet.webp' });
+    expect(manifest.spriteVersionNumber).toBe(2);
+    expect(() => DesktopPetPackSchema.parse({ version: 1, mode: 'codex-v2', availableActions: [],
+      missingRecommended: [], actionDataUrls: {}, message: 'ready' })).toThrow();
   });
 });

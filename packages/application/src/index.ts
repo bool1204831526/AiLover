@@ -122,6 +122,45 @@ export function retainRecentMessages<T>(messages: T[], maximum = MAX_RETAINED_CH
   return messages.length > maximum ? messages.slice(-maximum) : messages;
 }
 
+export const CODEX_PET_ATLAS = Object.freeze({
+  columns: 8,
+  rows: 11,
+  cellWidth: 192,
+  cellHeight: 208,
+  width: 1536,
+  height: 2288,
+});
+
+export const CODEX_PET_ANIMATIONS = {
+  idle: { row: 0, durations: [280, 110, 110, 140, 140, 320] },
+  'running-right': { row: 1, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+  'running-left': { row: 2, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+  waving: { row: 3, durations: [140, 140, 140, 280] },
+  jumping: { row: 4, durations: [140, 140, 140, 140, 280] },
+  failed: { row: 5, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
+  waiting: { row: 6, durations: [150, 150, 150, 150, 150, 260] },
+  running: { row: 7, durations: [120, 120, 120, 120, 120, 220] },
+  review: { row: 8, durations: [150, 150, 150, 150, 150, 280] },
+} as const;
+
+export type CodexPetAnimation = keyof typeof CODEX_PET_ANIMATIONS;
+export type CodexPetFrame = { row: number; column: number; duration: number };
+
+export function codexPetFrame(animation: CodexPetAnimation, frameIndex: number): CodexPetFrame {
+  const spec = CODEX_PET_ANIMATIONS[animation];
+  const column = ((frameIndex % spec.durations.length) + spec.durations.length) % spec.durations.length;
+  return { row: spec.row, column, duration: spec.durations[column] ?? 120 };
+}
+
+export function codexPetLookFrame(dx: number, dy: number, deadzone = 18): CodexPetFrame | null {
+  if (Math.hypot(dx, dy) < deadzone) return null;
+  const degrees = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  const direction = Math.round(degrees / 22.5) % 16;
+  return direction < 8
+    ? { row: 9, column: direction, duration: 120 }
+    : { row: 10, column: direction - 8, duration: 120 };
+}
+
 export type ModelChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type MemoryContextItem = { subject: string; content: string };
 

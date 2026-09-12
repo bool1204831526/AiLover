@@ -12,7 +12,8 @@ import {
   ConversationSnapshotSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
   DataOperationResultSchema, DeleteAllDataInputSchema, ImageCapabilitiesSchema, CompanionSettingsSchema,
-  DesktopPetPackManifestSchema, DesktopPetPackSchema, type DesktopPetPackManifest,
+  CodexPetManifestSchema, DesktopPetPackManifestSchema, DesktopPetPackSchema,
+  type CodexPetManifest, type DesktopPetPackManifest,
   type ChatStreamEvent,
 } from '@ailover/contracts';
 import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
@@ -164,6 +165,25 @@ async function readDesktopPetPack(characterId: string) {
   catch { return null; }
   if (!Number.isInteger(pointer.version) || pointer.version < 1) return null;
   const directory = join(root, String(pointer.version));
+  try {
+    const atlasManifest = CodexPetManifestSchema.parse(
+      JSON.parse(await readFile(join(directory, 'pet.json'), 'utf8')),
+    );
+    const fileName = atlasManifest.spritesheetPath;
+    if (basename(fileName) !== fileName) throw new Error('图集文件必须直接放在桌宠素材包根目录。');
+    const extension = extname(fileName).toLowerCase();
+    const mimeType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : null;
+    if (!mimeType) throw new Error('Codex v2 图集只支持 WebP 或 PNG。');
+    const data = await readFile(join(directory, fileName));
+    return DesktopPetPackSchema.parse({ version: pointer.version, mode: 'codex-v2',
+      availableActions: [], missingRecommended: [], actionDataUrls: {},
+      atlas: { id: atlasManifest.id, displayName: atlasManifest.displayName,
+        description: atlasManifest.description, spriteVersionNumber: 2,
+        dataUrl: `data:${mimeType};base64,${data.toString('base64')}` },
+      message: `已启用 Codex v2 动画图集版本 ${pointer.version}` });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   const manifest = DesktopPetPackManifestSchema.parse(
     JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8')),
   );
@@ -177,12 +197,74 @@ async function readDesktopPetPack(characterId: string) {
     actionDataUrls[action] = `data:${mimeType};base64,${(await readFile(join(directory, fileName))).toString('base64')}`;
   }
   const availableActions = Object.keys(manifest.actions);
-  return DesktopPetPackSchema.parse({ version: pointer.version, availableActions,
+  return DesktopPetPackSchema.parse({ version: pointer.version, mode: 'actions', availableActions,
     missingRecommended: recommendedPetActions.filter((action) => !availableActions.includes(action)),
     actionDataUrls, message: `已启用动画包版本 ${pointer.version}` });
 }
 
+function isAnimatedWebP(data: Buffer): boolean {
+  if (data.length < 20 || data.subarray(0, 4).toString('ascii') !== 'RIFF'
+    || data.subarray(8, 12).toString('ascii') !== 'WEBP') return false;
+  let offset = 12;
+  while (offset + 8 <= data.length) {
+    const chunk = data.subarray(offset, offset + 4).toString('ascii');
+    if (chunk === 'ANIM' || chunk === 'ANMF') return true;
+    const size = data.readUInt32LE(offset + 4);
+    offset += 8 + size + (size % 2);
+  }
+  return false;
+}
+
+async function validateCodexPetAtlas(sourceDirectory: string, manifest: CodexPetManifest): Promise<number> {
+  const fileName = manifest.spritesheetPath;
+  if (basename(fileName) !== fileName) throw new Error('spritesheetPath 必须是素材包根目录中的文件名。');
+  const extension = extname(fileName).toLowerCase();
+  if (!['.webp', '.png'].includes(extension)) throw new Error('Codex v2 图集只支持 WebP 或 PNG。');
+  const source = join(sourceDirectory, fileName);
+  const info = await stat(source);
+  if (!info.isFile() || info.size > 100 * 1024 * 1024) throw new Error(`${fileName} 无效或超过 100 MB。`);
+  const data = await readFile(source);
+  if (extension === '.webp' && isAnimatedWebP(data)) throw new Error('Codex v2 spritesheet.webp 必须是静态图集，不能是动画 WebP。');
+  const image = nativeImage.createFromBuffer(data);
+  if (image.isEmpty()) throw new Error(`${fileName} 不是有效的图片。`);
+  const size = image.getSize();
+  if (size.width !== 1536 || size.height !== 2288) {
+    throw new Error(`Codex v2 图集尺寸必须是 1536 x 2288，当前为 ${size.width} x ${size.height}。`);
+  }
+  return info.size;
+}
+
 async function importDesktopPetPack(character: Character, sourceDirectory: string) {
+  const codexManifestPath = join(sourceDirectory, 'pet.json');
+  let codexManifest: CodexPetManifest | null = null;
+  try {
+    if ((await stat(codexManifestPath)).size > 100 * 1024) throw new Error('pet.json 不能超过 100 KB。');
+    codexManifest = CodexPetManifestSchema.parse(JSON.parse(await readFile(codexManifestPath, 'utf8')));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+
+  if (codexManifest) {
+    await validateCodexPetAtlas(sourceDirectory, codexManifest);
+    const root = petPackRoot(character.id);
+    let currentVersion = 0;
+    try { currentVersion = Number((JSON.parse(await readFile(join(root, 'current.json'), 'utf8')) as { version: number }).version) || 0; }
+    catch { /* First imported pack. */ }
+    const version = currentVersion + 1;
+    const destination = join(root, String(version));
+    await mkdir(destination, { recursive: true });
+    try {
+      await writeFile(join(destination, 'pet.json'), JSON.stringify(codexManifest, null, 2), 'utf8');
+      await copyFile(join(sourceDirectory, codexManifest.spritesheetPath),
+        join(destination, codexManifest.spritesheetPath));
+      await writeFile(join(root, 'current.json'), JSON.stringify({ version }), 'utf8');
+    } catch (error) {
+      await rm(destination, { recursive: true, force: true });
+      throw error;
+    }
+    return readDesktopPetPack(character.id);
+  }
+
   const manifestPath = join(sourceDirectory, 'manifest.json');
   let manifest: DesktopPetPackManifest;
   try {

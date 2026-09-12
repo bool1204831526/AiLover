@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createCharacter } from '@ailover/domain';
 
 import { assembleChatContext, MAX_RETAINED_CHAT_MESSAGES, retainRecentMessages,
-  shouldSendCompanionPrompt, isCompanionQuietHours, type StoredChatMessage } from './index';
+  shouldSendCompanionPrompt, isCompanionQuietHours, codexPetFrame, codexPetLookFrame,
+  type StoredChatMessage } from './index';
 
 const character = createCharacter({
   name: '艾琳', gender: '女', ageSetting: '成年', identity: '用户的 AI 伴侣', background: '来自海边',
@@ -67,5 +68,21 @@ describe('retainRecentMessages', () => {
     expect(retained).toHaveLength(MAX_RETAINED_CHAT_MESSAGES);
     expect(retained[0]).toBe(1_500);
     expect(retained.at(-1)).toBe(1_999);
+  });
+});
+
+describe('Codex v2 pet animation', () => {
+  it('uses the contract row, frame count and timing', () => {
+    expect(codexPetFrame('idle', 0)).toEqual({ row: 0, column: 0, duration: 280 });
+    expect(codexPetFrame('waving', 4)).toEqual({ row: 3, column: 0, duration: 140 });
+    expect(codexPetFrame('running-left', 7)).toEqual({ row: 2, column: 7, duration: 220 });
+  });
+
+  it('maps pointer direction clockwise with a neutral deadzone', () => {
+    expect(codexPetLookFrame(0, -30)).toMatchObject({ row: 9, column: 0 });
+    expect(codexPetLookFrame(30, 0)).toMatchObject({ row: 9, column: 4 });
+    expect(codexPetLookFrame(0, 30)).toMatchObject({ row: 10, column: 0 });
+    expect(codexPetLookFrame(-30, 0)).toMatchObject({ row: 10, column: 4 });
+    expect(codexPetLookFrame(2, 2)).toBeNull();
   });
 });

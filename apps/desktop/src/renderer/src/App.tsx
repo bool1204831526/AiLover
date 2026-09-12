@@ -203,15 +203,21 @@ function CharacterView({ character, visual, onVisualChange, onCreate }: {
           当前使用导入模式。图片服务不可用时，聊天功能仍可正常使用。</div>}
       </section>
       <section className="pet-asset-section"><div className="settings-heading"><h3>桌宠动作素材</h3>
-        <p>导入一个动作素材文件夹。使用标准文件名时不需要清单文件。</p></div>
-        <div className="pet-action-requirements">
+        <p>导入一个素材文件夹。推荐使用 Codex v2 图集，也兼容原有的逐动作文件。</p></div>
+        {petPack?.mode === 'codex-v2' ? <div className="pet-guide-note"><strong>{petPack.atlas?.displayName}</strong>
+          <p>Codex v2 · 9 组动作 · 16 个注视方向</p></div> : <div className="pet-action-requirements">
           {petActionNames.map((action) =>
             <span className={petPack?.availableActions.includes(action) ? 'available' : ''} key={action}>
               {petPack?.availableActions.includes(action) ? <Check size={12} /> : null}
               {petActionInfo[action].name} · {action}.webp</span>)}
-        </div>
-        {petPack && <small>{petPack.message} · 已导入 {petPack.availableActions.length} 个动作</small>}
+        </div>}
+        {petPack && <small>{petPack.message}{petPack.mode === 'actions' ? ` · 已导入 ${petPack.availableActions.length} 个动作` : ''}</small>}
         <details className="pet-asset-guide"><summary>查看素材格式和文件清单</summary>
+          <div className="pet-guide-note"><strong>Codex v2 图集（推荐）</strong>
+            <p>文件夹内放置 <code>pet.json</code> 和一张静态 <code>spritesheet.webp</code>。图集必须为 1536 x 2288 像素，8 列 11 行，每格 192 x 208 像素，透明背景。</p>
+            <pre>{`{\n  "id": "my-pet",\n  "displayName": "我的桌宠",\n  "description": "角色说明",\n  "spriteVersionNumber": 2,\n  "spritesheetPath": "spritesheet.webp"\n}`}</pre></div>
+          <div className="pet-guide-note"><strong>逐动作文件（兼容）</strong>
+            <p>适合已有的动画 WebP。使用下方标准文件名时无需清单。</p></div>
           <div className="pet-format-grid"><div><strong>推荐格式</strong><span>带透明背景的动画 WebP</span></div>
             <div><strong>静态备用</strong><span>透明 PNG</span></div><div><strong>画布尺寸</strong><span>建议 512 x 512 像素，所有动作一致</span></div>
             <div><strong>动画速度</strong><span>建议 8-15 帧/秒</span></div><div><strong>单个文件</strong><span>最大 20 MB</span></div>
