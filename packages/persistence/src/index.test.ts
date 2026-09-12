@@ -51,6 +51,11 @@ describe('SqliteModelProfileRepository', () => {
     const path = join(tmpdir(), `ailover-${randomUUID()}.sqlite`);
     paths.push(path);
     const database = openAppDatabase(path);
+    database.sqlite.prepare('INSERT INTO users(id, display_name, locale, timezone, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run('local-user', '本地用户', 'zh-CN', 'Asia/Shanghai', new Date().toISOString());
+    database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
+      speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('character-1', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
     const repository = new SqliteModelProfileRepository(database);
     await repository.save({ provider: 'openai-compatible', endpoint: 'https://example.test/v1',
       model: 'model-a', encryptedApiKey: 'encrypted-value', updatedAt: new Date('2026-09-11T00:00:00Z') });
