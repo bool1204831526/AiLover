@@ -117,6 +117,7 @@ const api: AiLoverDesktopApi = {
     },
     correct: async (input) => { const value = MemoryCorrectionSchema.parse(input); await ipcRenderer.invoke(IPC_CHANNELS.memoryCorrect, value); },
     delete: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.memoryDelete, id); },
+    restore: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.memoryRestore, id); },
   },
   visuals: {
     get: async () => {

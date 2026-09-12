@@ -75,7 +75,7 @@ describe('database backup safety', () => {
       updatedAt: new Date() });
     await createSanitizedDatabaseSnapshot(source, snapshotPath);
     source.close();
-    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(14);
+    expect(validateRestoredDatabase(snapshotPath).schemaVersion).toBe(15);
     const snapshot = openAppDatabase(snapshotPath);
     expect(snapshot.sqlite.prepare('SELECT encrypted_api_key FROM model_profiles').get())
       .toEqual({ encrypted_api_key: null });
@@ -289,6 +289,11 @@ describe('SqliteMemoryRepository', () => {
     expect(await memoryRepository.softDelete(character.id, 'memory-fts')).toBe(true);
     expect((await memoryRepository.listForCenter(character.id))[0]?.state).toBe('expired');
     expect(await memoryRepository.listActive(character.id)).toHaveLength(0);
+    expect(await memoryRepository.wasSoftDeleted(character.id, 'memory-fts')).toBe(true);
+    expect(await memoryRepository.restore('another-character', 'memory-fts', new Date())).toBe(false);
+    expect(await memoryRepository.restore(character.id, 'memory-fts', new Date())).toBe(true);
+    expect(await memoryRepository.wasSoftDeleted(character.id, 'memory-fts')).toBe(false);
+    expect(await memoryRepository.listActive(character.id)).toHaveLength(1);
     database.close();
   });
 });

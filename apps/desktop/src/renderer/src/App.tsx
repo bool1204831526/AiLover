@@ -184,6 +184,10 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
     if (!window.ailover || !window.confirm('删除后将不再参与记忆召回，是否继续？')) return;
     await window.ailover.memory.delete(entry.id); setEntries(await window.ailover.memory.list());
   }
+  async function restore(entry: MemoryCenterEntry): Promise<void> {
+    if (!window.ailover) return;
+    await window.ailover.memory.restore(entry.id); setEntries(await window.ailover.memory.list());
+  }
   return <><header className="conversation-header"><div><span className="eyebrow">长期记忆</span>
     <h2>{character ? `${character.name}记住的事` : '尚未相遇'}</h2></div></header>
     <div className="memory-page">{character && entries.length > 0 && <div className="memory-toolbar">
@@ -209,6 +213,8 @@ function MemoryView({ character, onOpenSource }: { character: CharacterSnapshot 
               查看来源对话 · {new Date(entry.source.createdAt).toLocaleDateString('zh-CN')}
             </button>}
             {entry.state === 'active' && <div className="memory-entry-actions"><button type="button" onClick={() => void edit(entry)}>编辑</button><button type="button" onClick={() => void remove(entry)}>删除</button></div>}
+            {entry.canRestore && <div className="memory-entry-actions"><button type="button"
+              onClick={() => void restore(entry)}><RotateCcw size={13} aria-hidden="true" />恢复记忆</button></div>}
           </article>)}</div>}</div></>;
 }
 

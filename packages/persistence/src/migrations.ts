@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 14;
+export const CURRENT_SCHEMA_VERSION = 15;
 
 const migrations = [{
   version: 1,
@@ -381,6 +381,17 @@ const migrations = [{
     );
     CREATE INDEX IF NOT EXISTS self_model_entries_active
       ON self_model_entries(character_id, status, version DESC);
+  `,
+}, {
+  version: 15,
+  sql: `
+    CREATE TABLE IF NOT EXISTS memory_deletions (
+      memory_id TEXT PRIMARY KEY NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+      deleted_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS memory_deletions_character
+      ON memory_deletions(character_id, deleted_at DESC);
   `,
 }] as const;
 

@@ -72,6 +72,7 @@
 - Scoped every memory correction and deletion to the current character and preserved immutable source evidence.
 - Added keyword search, type/state filters, sorting and visibility for soft-deleted memories.
 - Added character-scoped source excerpts and direct navigation to the source conversation context.
+- Added audited undo for user-deleted memories while keeping naturally expired plans non-restorable.
 
 # Consolidated memory persistence
 

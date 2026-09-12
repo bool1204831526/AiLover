@@ -191,3 +191,9 @@ export const selfModelEntries = sqliteTable('self_model_entries', {
   version: integer('version').notNull(), sourceMessageId: text('source_message_id').references(() => messages.id),
   reason: text('reason').notNull(), status: text('status').notNull(), createdAt: text('created_at').notNull(),
 });
+
+export const memoryDeletions = sqliteTable('memory_deletions', {
+  memoryId: text('memory_id').primaryKey().references(() => memories.id),
+  characterId: text('character_id').notNull().references(() => characters.id),
+  deletedAt: text('deleted_at').notNull(),
+});

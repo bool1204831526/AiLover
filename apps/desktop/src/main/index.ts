@@ -481,9 +481,12 @@ function registerIpcHandlers(): void {
     const memories = await memoryRepository.listForCenter(current.id);
     return Promise.all(buildMemoryCenterEntries(memories).map(async (memory) => {
       const source = await memoryRepository.getPrimarySource(current.id, memory.id);
+      const canRestore = memory.state === 'expired' &&
+        await memoryRepository.wasSoftDeleted(current.id, memory.id) &&
+        (!memory.expiresAt || memory.expiresAt > new Date());
       return { ...memory, firstSeenAt: memory.firstSeenAt.toISOString(),
         lastSeenAt: memory.lastSeenAt.toISOString(), expiresAt: memory.expiresAt?.toISOString() ?? null,
-        source: source ? { ...source, createdAt: source.createdAt.toISOString() } : null };
+        source: source ? { ...source, createdAt: source.createdAt.toISOString() } : null, canRestore };
     }));
   });
   ipcMain.handle(IPC_CHANNELS.memoryCorrect, async (_event, input: unknown) => {
@@ -498,6 +501,13 @@ function registerIpcHandlers(): void {
     const current = await characterService.findCurrent();
     if (!current || !(await memoryRepository.softDelete(current.id, id))) {
       throw new Error('记忆不存在或不属于当前角色');
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.memoryRestore, async (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('无效的记忆标识');
+    const current = await characterService.findCurrent();
+    if (!current || !(await memoryRepository.restore(current.id, id, new Date()))) {
+      throw new Error('这条记忆无法恢复');
     }
   });
 

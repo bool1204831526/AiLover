@@ -511,9 +511,35 @@ export class SqliteMemoryRepository implements MemoryRepository {
   }
 
   public async softDelete(characterId: string, id: string): Promise<boolean> {
-    const result = this.database.sqlite.prepare(`UPDATE memories SET state = 'expired', recall_strength = 0
-      WHERE id = ? AND character_id = ?`).run(id, characterId);
-    return result.changes > 0;
+    return this.database.sqlite.transaction(() => {
+      const result = this.database.sqlite.prepare(`UPDATE memories SET state = 'expired', recall_strength = 0
+        WHERE id = ? AND character_id = ? AND state = 'active'`).run(id, characterId);
+      if (!result.changes) return false;
+      this.database.sqlite.prepare(`INSERT OR REPLACE INTO memory_deletions(memory_id, character_id, deleted_at)
+        VALUES (?, ?, ?)`).run(id, characterId, new Date().toISOString());
+      return true;
+    })();
+  }
+
+  public async wasSoftDeleted(characterId: string, id: string): Promise<boolean> {
+    return Boolean(this.database.sqlite.prepare(`SELECT 1 FROM memory_deletions
+      WHERE memory_id = ? AND character_id = ?`).get(id, characterId));
+  }
+
+  public async restore(characterId: string, id: string, now: Date): Promise<boolean> {
+    return this.database.sqlite.transaction(() => {
+      const eligible = this.database.sqlite.prepare(`SELECT memories.id FROM memories
+        JOIN memory_deletions ON memory_deletions.memory_id = memories.id
+        WHERE memories.id = ? AND memories.character_id = ? AND memory_deletions.character_id = ?
+        AND memories.state = 'expired' AND (memories.expires_at IS NULL OR memories.expires_at > ?)`)
+        .get(id, characterId, characterId, now.toISOString());
+      if (!eligible) return false;
+      this.database.sqlite.prepare(`UPDATE memories SET state = 'active', recall_strength = 0.5,
+        last_seen_at = ? WHERE id = ? AND character_id = ?`).run(now.toISOString(), id, characterId);
+      this.database.sqlite.prepare('DELETE FROM memory_deletions WHERE memory_id = ? AND character_id = ?')
+        .run(id, characterId);
+      return true;
+    })();
   }
 
   private insertSource(memoryId: string, messageId: string, evidence: string, at: Date): boolean {
@@ -874,5 +900,5 @@ function parseStringArray(value: string): string[] {
 
 export { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 export { assets, characters, characterVisualIdentities, conversations, emotionStates, memories, episodicMemories,
-  consolidatedMemories, desktopPetWindowState, futureIntentions, messages, modelProfiles, personalityBaselines, personalityStates, reflections, selfModelEntries,
+  consolidatedMemories, desktopPetWindowState, futureIntentions, memoryDeletions, messages, modelProfiles, personalityBaselines, personalityStates, reflections, selfModelEntries,
   relationshipStates, users } from './schema';

@@ -17,7 +17,7 @@ export const IPC_CHANNELS = {
   relationshipGetTimeline: 'relationship:get-timeline',
   personalityEvidenceGet: 'personality-evidence:get',
   memoryList: 'memory:list',
-  memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete',
+  memoryCorrect: 'memory:correct', memoryDelete: 'memory:delete', memoryRestore: 'memory:restore',
   characterVisualGet: 'character-visual:get',
   characterAssetImport: 'character-asset:import',
   imageCapabilitiesGet: 'image-capabilities:get',
@@ -326,6 +326,7 @@ export const MemoryCenterEntrySchema = z.object({
   expiresAt: z.iso.datetime().nullable(), evidence: z.string(),
   source: z.object({ messageId: z.string().min(1), conversationId: z.string().min(1),
     excerpt: z.string(), createdAt: z.iso.datetime() }).nullable(),
+  canRestore: z.boolean(),
 });
 export const MemoryCenterEntriesSchema = z.array(MemoryCenterEntrySchema);
 export type MemoryCenterEntry = z.infer<typeof MemoryCenterEntrySchema>;
@@ -358,7 +359,8 @@ export interface AiLoverDesktopApi {
     getTimeline(): Promise<RelationshipMilestone[]>;
   };
   personality: { getEvidence(): Promise<PersonalityEvidenceSummary[]> };
-  memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>; delete(id: string): Promise<void> };
+  memory: { list(): Promise<MemoryCenterEntry[]>; correct(input: MemoryCorrection): Promise<void>;
+    delete(id: string): Promise<void>; restore(id: string): Promise<void> };
   visuals: {
     get(): Promise<CharacterVisualProfile | null>;
     importPortrait(): Promise<CharacterVisualProfile | null>;
