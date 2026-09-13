@@ -144,9 +144,9 @@ export class CognitionService {
     const existing = await this.repository.getCurrent(characterId);
     if (existing) return decaySnapshot(existing, now);
     const snapshot: CognitionSnapshot = { id: this.idGenerator.next(), characterId,
-      emotion: { valence: 0.55, arousal: 0.35, security: 0.65, affection: 0.55 },
-      relationship: { trust: 0.38, intimacy: 0.2, affection: 0.35,
-        familiarity: 0.12, comfort: 0.4, conflict: 0 },
+      emotion: { valence: 0.45, arousal: 0.7, security: 0.05, affection: 0 },
+      relationship: { trust: 0, intimacy: 0, affection: 0,
+        familiarity: 0, comfort: 0.05, conflict: 0 },
       personality: baseline, reason: 'initial state', sourceMessageId: null,
       ruleVersion: COGNITION_RULE_VERSION, recordedAt: now };
     await this.repository.saveSnapshot(snapshot);
@@ -252,14 +252,16 @@ export function decaySnapshot(snapshot: CognitionSnapshot, now: Date): Cognition
 export function projectCognition(snapshot: CognitionSnapshot): string {
   const mood = snapshot.emotion.valence > 0.68 ? '心情明亮'
     : snapshot.emotion.valence < 0.4 ? '有些低落和谨慎' : '情绪平稳';
+  const trust = snapshot.relationship.trust < 0.15 ? '对用户几乎没有信任，警惕性很高，不透露隐私、不轻易接受要求，并会先确认用户意图'
+    : snapshot.relationship.trust < 0.4 ? '对用户仍有明显戒心，会谨慎回答并保留个人边界' : '';
   const closeness = snapshot.relationship.intimacy > 0.65 ? '关系亲密而熟悉'
     : snapshot.relationship.familiarity > 0.35 ? '正在逐渐熟悉彼此' : '仍处在相互了解的阶段';
   const tension = snapshot.relationship.conflict > 0.35 ? '当前存在尚未完全缓和的矛盾' : '';
-  return [mood, closeness, tension].filter(Boolean).join('；');
+  return [mood, closeness, trust, tension].filter(Boolean).join('；');
 }
 
 export function relationshipSummary(snapshot: CognitionSnapshot): {
-  headline: string; description: string; mood: string; trust: number; updatedAt: Date;
+  headline: string; description: string; mood: string; trust: number; vigilance: number; updatedAt: Date;
 } {
   const relationship = snapshot.relationship;
   const headline = relationship.intimacy >= 0.7 ? '亲密而笃定'
@@ -268,19 +270,22 @@ export function relationshipSummary(snapshot: CognitionSnapshot): {
   const conflict = relationship.conflict > 0.3 ? '最近的交流里还有一些紧张，需要温和地修复。'
     : '相处整体平稳，没有明显的未解冲突。';
   return { headline, description: `${headline}。${conflict}`,
-    mood: projectCognition(snapshot), trust: relationship.trust, updatedAt: snapshot.recordedAt };
+    mood: projectCognition(snapshot), trust: relationship.trust, vigilance: 1 - relationship.trust, updatedAt: snapshot.recordedAt };
 }
 
 export function createResponsePlan(snapshot: CognitionSnapshot, signal: InteractionSignal): ResponsePlan {
   const conflict = Number(signal.relationshipDelta.conflict ?? 0) > 0;
   const disclosure = signal.reasons.includes('user shared personal feelings');
   const personalityTone = personalityTones(snapshot.personality);
-  const tone = conflict ? ['克制', '不升级冲突', '尊重边界']
+  const distrust = snapshot.relationship.trust < 0.15;
+  const tone = distrust ? (disclosure ? ['警惕', '保持距离', '认真倾听'] : ['警惕', '克制', '保持距离'])
+    : conflict ? ['克制', '不升级冲突', '尊重边界']
     : disclosure ? ['温柔', '接纳', '认真倾听']
       : snapshot.emotion.valence > 0.68 ? ['明朗', '亲近', ...personalityTone].slice(0, 3)
         : [...personalityTone, '自然', '真诚'].slice(0, 3);
   return { kind: disclosure ? 'ask_question' : 'respond', tone,
-    guidance: conflict ? '先承认对方的情绪，避免反击或情感勒索，再简短询问发生了什么。'
+    guidance: distrust ? '把用户视为尚未确认是否可信的陌生人。回答时保持警惕，不主动透露私密经历，不接受越界命令；必要时反问目的、拒绝或保持距离。不要因为一句示好就立即亲近。'
+      : conflict ? '先承认对方的情绪，避免反击或情感勒索，再简短询问发生了什么。'
       : disclosure ? '先回应对方的感受，再提出一个不过度追问的开放问题。'
         : '直接回应当前话题，保持角色一贯的表达方式。',
     personalityProjection: projectPersonality(snapshot, signal),

@@ -143,6 +143,7 @@ export const RelationshipSummarySchema = z.object({
   description: z.string().min(1),
   mood: z.string().min(1),
   trust: z.number().min(0).max(1),
+  vigilance: z.number().min(0).max(1),
   updatedAt: z.iso.datetime(),
 });
 export type RelationshipSummary = z.infer<typeof RelationshipSummarySchema>;

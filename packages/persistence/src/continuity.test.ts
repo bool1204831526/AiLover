@@ -93,7 +93,7 @@ describe('long-term continuity', () => {
       queryMessageId: 'continuity-query', query: '手冲咖啡', now: new Date('2026-09-11T08:00:00Z') });
     expect(recalled[0]?.id).toBe('continuity-memory');
     const cognition = await new SqliteCognitionRepository(second).getCurrent(character.id);
-    expect(cognition?.relationship.affection).toBeGreaterThan(0.3);
+    expect(cognition?.relationship.affection).toBeGreaterThan(0);
     second.close();
   });
 

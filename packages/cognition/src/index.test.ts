@@ -52,7 +52,7 @@ it('includes recalled emotional associations in interaction state', async () => 
   const state = await service.processInteraction({ characterId: 'character-1', baseline,
     sourceMessageId: 'message-association', text: '今天聊聊近况', now: new Date('2026-09-12'),
     emotionalAssociations: [{ relevance: 1, emotionalWeight: 1, userEmotion: '积极', relationshipRelevance: 0.9 }] });
-  expect(state.emotion.valence).toBeGreaterThan(0.55);
+  expect(state.emotion.valence).toBeGreaterThan(0.45);
 });
 
 it('prioritizes the strongest associations instead of input order', () => {

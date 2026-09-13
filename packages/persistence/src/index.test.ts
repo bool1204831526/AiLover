@@ -426,7 +426,7 @@ describe('SqliteCognitionRepository', () => {
     const second = openAppDatabase(path);
     const restored = await new SqliteCognitionRepository(second).getCurrent(character.id);
     expect(restored?.sourceMessageId).toBe('cognition-message');
-    expect(restored?.relationship.intimacy).toBeGreaterThan(0.2);
+    expect(restored?.relationship.intimacy).toBeGreaterThan(0);
     expect(second.sqlite.prepare('SELECT rule_version FROM relationship_states').get())
       .toEqual({ rule_version: 'cognition-v1' });
     expect(second.sqlite.prepare('SELECT trigger_message_id FROM reflections').get())
