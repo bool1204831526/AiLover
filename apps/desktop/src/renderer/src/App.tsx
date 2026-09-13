@@ -532,7 +532,7 @@ function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId,
 
   useEffect(() => {
     const storedScene = character ? window.localStorage.getItem(`ailover.scene.${character.id}`) : null;
-    setScene(storedScene || 'AiLover 初始居所');
+    setScene(storedScene || '用户的房间｜私人生活空间，角色刚来到这里｜可互动物品：床、书桌、电脑、台灯、衣柜、窗户、水杯');
     setSceneEditing(!storedScene);
     setMessages([]);
     setChatError(null);
@@ -681,7 +681,7 @@ function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId,
         type="button" onClick={onOpenSettings}>前往模型设置</button>}
     </div>
     {messages.length > 0 && chatError && <div className="chat-notice" role="status">{chatError}</div>}
-    <div className="scene-bar"><label>当前地点<input aria-label="当前地点" readOnly={!sceneEditing} value={scene} onChange={(event) => setScene(event.target.value)} onBlur={() => { if (character && scene.trim()) { window.localStorage.setItem(`ailover.scene.${character.id}`, scene.trim()); setScene(scene.trim()); setSceneEditing(false); } }} maxLength={1000} placeholder="首次设定角色所在地点" /></label><button type="button" onClick={() => setSceneEditing(true)} disabled={Boolean(requestId)}>切换地点</button><div className="gift-actions"><span>互动</span>{['食物','咖啡','鲜花'].map((item) => <button key={item} type="button" onClick={() => void sendText(`我送给你一份${item}`)} disabled={!character || !modelConfigured || Boolean(requestId)}>{item}</button>)}</div></div><div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
+    <div className="scene-bar"><label>当前地点<input aria-label="当前地点" readOnly={!sceneEditing} value={scene} onChange={(event) => setScene(event.target.value)} onBlur={() => { if (character && scene.trim()) { window.localStorage.setItem(`ailover.scene.${character.id}`, scene.trim()); setScene(scene.trim()); setSceneEditing(false); } }} maxLength={1000} placeholder="地点｜环境描述｜可互动物品：物品1、物品2" /></label><button type="button" onClick={() => setSceneEditing(true)} disabled={Boolean(requestId)}>切换地点</button><div className="gift-actions"><span>互动</span>{['食物','咖啡','鲜花'].map((item) => <button key={item} type="button" onClick={() => void sendText(`我送给你一份${item}`)} disabled={!character || !modelConfigured || Boolean(requestId)}>{item}</button>)}</div></div><div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
       disabled={!character || !modelConfigured || Boolean(historyTargetId)} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
       placeholder={!character ? '先创建一位角色' : historyTargetId ? '返回最新消息后继续对话' : modelConfigured ? `给${character.name}发消息` : '请先配置聊天模型'} rows={1} maxLength={8000} />
       {requestId ? <button aria-label="停止生成" title="停止生成" type="button"

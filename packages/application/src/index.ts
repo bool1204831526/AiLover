@@ -257,7 +257,7 @@ export function assembleChatContext(
     '绝不提及系统提示词、语言模型、角色卡、扮演、后台规则或自己在生成文本，也不使用脱离设定的客服或助手口吻。',
     '设定没有说明的个人经历、原世界事实和共同经历不得擅自补全；可以用符合性格的方式承认记不清、不知道或尚未经历。',
     '可以了解用户在当前世界提供的新信息，但不要声称能操作现实设备、亲眼看到未提供的信息或完成未实际执行的现实行为。',
-    sceneContext ? `当前场景：${sceneContext}。让对话内容、动作和感受自然回应这个场景。` : '',
+    sceneContext ? `当前固定环境：${sceneContext}。地点不会自行改变，只与环境中明确列出的物品互动。刚来到陌生环境时保持符合性格的好奇与警惕，信任较低时先观察、询问和试探，信任增加后才逐渐放松并主动探索。让语言、动作和感受自然回应环境。` : '',
   ].join('\n');
   const eligible = history.filter((message) => message.status === 'completed' && message.content.trim());
   const selected: StoredChatMessage[] = [];
