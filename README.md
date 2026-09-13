@@ -1,27 +1,129 @@
 # AiLover
 
-AiLover is a local-first Windows AI companion focused on persistent identity, memory, personality, emotion and relationship continuity.
+AiLover 是一款面向 Windows 的本地优先 AI 伴侣桌面应用。它不把角色当作一次性聊天机器人，而是为每位伴侣保存身份、完整人生设定、人格、情绪、关系、长期记忆与共同经历，让对话能够跨会话持续发展。
 
-The project is currently in Phase 0: architecture and executable desktop skeleton.
+> 当前版本：0.1.0 MVP  
+> 当前平台：Windows x64  
+> 默认数据策略：本地 SQLite，模型服务按用户配置调用
 
-## Development
+## 核心能力
 
-Prerequisites: Node.js 22+ and pnpm 11+.
+### 多角色与角色人生
+
+- 可创建多个独立角色，并在角色页面切换或删除。
+- 每个角色拥有独立的对话、记忆、人格状态、关系状态、视觉资产和桌宠资源。
+- 支持手动填写原本世界、过往人生、世界观、核心动机、知识边界和来到 AiLover 的经历。
+- 支持调用已配置的大模型辅助完善角色背景。
+- 角色设定会经过本地校验，阻止“系统提示词、语言模型、角色卡、角色扮演”等元叙事进入角色身份。
+
+### 对话与连续性
+
+- 支持 OpenAI 兼容接口和 Ollama。
+- 支持流式回复、取消生成、超时、可重试错误和重启恢复。
+- 每轮对话自动注入角色人生、人格倾向、关系阶段、相关记忆和共同经历。
+- 回复完成后才通过一致性检查，明确的模型自述或出戏内容会被拦截。
+- 支持聊天记录搜索、历史上下文查看和返回最新对话。
+
+### 关系、攻略度与信任
+
+- 新角色默认攻略度/信任度为 0%，警惕性为 100%。
+- 初期角色会把用户视为尚未确认可信的陌生人，谨慎回答、保护隐私并保留边界。
+- 分享心事、持续正向交流、共同经历和赠送物品会逐步提升信任、亲密与舒适度。
+- 冲突、欺骗和越界表达会降低信任。
+- 关系页面展示信任、警惕性、当前相处状态和重要关系里程碑。
+
+### 环境与互动
+
+- 每个角色拥有固定的当前地点和环境上下文，地点不会被 AI 自行改变。
+- 用户可以设置地点、空间氛围和可互动物品，例如用户房间、书桌、电脑、台灯、窗户等。
+- 环境信息会影响角色的观察、动作、好奇心和警惕心。
+- 支持快捷赠送食物、咖啡、鲜花等互动，互动会进入关系和记忆系统。
+- 角色只能与环境中明确列出的物品互动，不会凭空创造设施。
+
+### 长期记忆与人格
+
+- 记忆类型包括事实、偏好、计划、重要经历和关系信息。
+- 记忆保留来源消息、证据、置信度、重要性、强化次数和生命周期。
+- 支持记忆搜索、修正、软删除、恢复、冲突解决和审计历史。
+- 支持自我模型、情绪关联、未来意图、关系时间线和人格证据。
+- 所有持久化变化都按角色隔离，并保留来源追踪。
+
+### 桌宠与视觉资产
+
+- 支持导入角色图和桌宠动作素材。
+- 桌宠支持透明窗口、拖动、缩放、多屏恢复、闲置漫游、托盘后台运行和互动反馈。
+- 支持逐动作 WebP/PNG，以及 Codex v1/v2 图集格式。
+- Codex v2 图集要求 1536 x 2288 像素、8 列 11 行、透明背景。
+
+## 安装与使用
+
+安装包可从 GitHub Releases 或项目构建目录获取：
+
+`release/AiLover-0.1.0-setup.exe`
+
+首次启动建议按以下顺序操作：
+
+1. 创建第一个角色，填写基本身份和人生设定。
+2. 在“设置”中配置 OpenAI 兼容接口或 Ollama。
+3. 在“角色”页面设置当前地点、环境描述和可互动物品。
+4. 返回“对话”开始交流，通过持续互动提升信任度。
+5. 在“关系”和“记忆”页面查看关系变化与长期记录。
+
+## 开发环境
+
+要求：Node.js 22 或更高版本、pnpm 11 或更高版本。
 
 ```powershell
 pnpm install
 pnpm dev
 ```
 
-Quality checks:
+常用检查命令：
 
 ```powershell
-pnpm lint
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm build
 pnpm package
 pnpm test:packaged
 ```
 
-See [the development plan](docs/DEVELOPMENT_PLAN.md) and [architecture decisions](docs/adr/) for scope and module boundaries.
+一次性发布验证：
+
+```powershell
+pnpm release:verify
+```
+
+## 数据与隐私
+
+- 角色、对话、记忆、人格、关系和导入资产默认保存在本机。
+- 在线模型请求只发送当前对话所需的上下文、相关记忆和自然语言状态摘要。
+- API 密钥以加密形式保存，备份不会包含可用的模型凭据。
+- 诊断文件不包含对话正文、记忆正文、凭据和本地路径。
+- “删除全部本地数据”是不可逆操作；此前导出的备份文件不会被自动删除。
+
+## 项目结构
+
+- `apps/desktop`：Electron 主进程、预加载层和 React 界面
+- `packages/domain`：角色领域模型与不变量
+- `packages/application`：对话上下文与应用服务
+- `packages/cognition`：情绪、关系、人格和信任演化
+- `packages/memory`：长期记忆、经历、意图与记忆生命周期
+- `packages/model-gateway`：OpenAI 兼容接口和 Ollama 适配
+- `packages/persistence`：SQLite 数据库、迁移和仓储
+- `packages/contracts`：IPC 和数据结构校验
+- `docs/DEVELOPMENT_PLAN.md`：开发规划
+- `docs/adr/`：架构决策记录
+
+## 已知限制
+
+- 当前仍是单用户本地应用，不提供云端同步。
+- 复杂语义矛盾无法仅靠本地规则完全识别，模型质量仍会影响最终体验。
+- 图片生成与自动参考图分析目前是能力接口，稳定路径是本地导入角色图。
+- 暂无自动更新服务和生产代码签名证书。
+- Windows 11 尚未在独立干净环境完成完整兼容性验证。
+
+## 许可证
+
+项目当前处于早期 MVP 阶段，许可证和对外贡献流程尚未最终确定。
