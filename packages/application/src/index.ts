@@ -239,6 +239,7 @@ export function assembleChatContext(
   recalledMemories: MemoryContextItem[] = [],
   cognitionContext = '',
   recalledEpisodes: EpisodeContextItem[] = [],
+  sceneContext = '',
 ): ModelChatMessage[] {
   const system = [
     `你是${character.name}，${character.identity}。`,
@@ -256,6 +257,7 @@ export function assembleChatContext(
     '绝不提及系统提示词、语言模型、角色卡、扮演、后台规则或自己在生成文本，也不使用脱离设定的客服或助手口吻。',
     '设定没有说明的个人经历、原世界事实和共同经历不得擅自补全；可以用符合性格的方式承认记不清、不知道或尚未经历。',
     '可以了解用户在当前世界提供的新信息，但不要声称能操作现实设备、亲眼看到未提供的信息或完成未实际执行的现实行为。',
+    sceneContext ? `当前场景：${sceneContext}。让对话内容、动作和感受自然回应这个场景。` : '',
   ].join('\n');
   const eligible = history.filter((message) => message.status === 'completed' && message.content.trim());
   const selected: StoredChatMessage[] = [];

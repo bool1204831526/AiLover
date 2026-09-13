@@ -205,6 +205,11 @@ export function analyzeInteraction(text: string): InteractionSignal {
     signal.relationshipDelta = { affection: 0.025, comfort: 0.018, trust: 0.012 };
     signal.reasons.push('received positive affection');
   }
+  if (/(送你|给你|赠送|礼物|食物|蛋糕|咖啡|鲜花|水果|点心)/.test(text)) {
+    signal.emotionDelta = merge(signal.emotionDelta, { valence: 0.08, affection: 0.06, security: 0.03 });
+    signal.relationshipDelta = merge(signal.relationshipDelta, { trust: 0.035, affection: 0.03, comfort: 0.02 });
+    signal.reasons.push('received a thoughtful gift');
+  }
   if (/(讨厌你|闭嘴|滚|骗我|失望|生气)/.test(text)) {
     signal.emotionDelta = merge(signal.emotionDelta, { valence: -0.14, security: -0.08, arousal: 0.1 });
     signal.relationshipDelta = merge(signal.relationshipDelta,
@@ -254,7 +259,7 @@ export function projectCognition(snapshot: CognitionSnapshot): string {
 }
 
 export function relationshipSummary(snapshot: CognitionSnapshot): {
-  headline: string; description: string; mood: string; updatedAt: Date;
+  headline: string; description: string; mood: string; trust: number; updatedAt: Date;
 } {
   const relationship = snapshot.relationship;
   const headline = relationship.intimacy >= 0.7 ? '亲密而笃定'
@@ -263,7 +268,7 @@ export function relationshipSummary(snapshot: CognitionSnapshot): {
   const conflict = relationship.conflict > 0.3 ? '最近的交流里还有一些紧张，需要温和地修复。'
     : '相处整体平稳，没有明显的未解冲突。';
   return { headline, description: `${headline}。${conflict}`,
-    mood: projectCognition(snapshot), updatedAt: snapshot.recordedAt };
+    mood: projectCognition(snapshot), trust: relationship.trust, updatedAt: snapshot.recordedAt };
 }
 
 export function createResponsePlan(snapshot: CognitionSnapshot, signal: InteractionSignal): ResponsePlan {

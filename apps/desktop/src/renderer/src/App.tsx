@@ -484,7 +484,7 @@ function RelationshipView({ character }: { character: CharacterSnapshot | null }
     </div> : failed ? <div className="relationship-empty"><p>暂时无法读取关系状态。</p></div>
       : summary ? <section className="relationship-summary">
         <span className="profile-kicker">当前关系</span><h3>{summary.headline}</h3>
-        <p>{summary.description}</p><div className="relationship-mood"><strong>此刻的相处</strong>
+        <p>{summary.description}</p><div className="trust-meter"><strong>信任 / 攻略度</strong><span>{Math.round(summary.trust * 100)}%</span><div><i style={{ width: `${Math.round(summary.trust * 100)}%` }} /></div></div><div className="relationship-mood"><strong>此刻的相处</strong>
           <span>{summary.mood}</span></div>
         <small>更新于 {new Date(summary.updatedAt).toLocaleString('zh-CN')}</small>
       </section> : <div className="relationship-empty"><p>正在整理你们的相处状态…</p></div>}
@@ -526,6 +526,7 @@ function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId,
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null);
   const [historyTargetId, setHistoryTargetId] = useState<string | null>(null);
+  const [scene, setScene] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -612,7 +613,7 @@ function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId,
     setRequestId('pending');
     try {
       if (!window.ailover) throw new Error('聊天服务不可用');
-      const receipt = await window.ailover.chat.send({ text: content, clientMessageId: crypto.randomUUID() });
+      const receipt = await window.ailover.chat.send({ text: content, scene: scene.trim() || undefined, clientMessageId: crypto.randomUUID() });
       setMessages((current) => mergeChatMessages(current, [receipt.userMessage, receipt.assistantMessage]));
       setRequestId(receipt.requestId);
     } catch {
@@ -676,7 +677,7 @@ function ChatView({ character, bootstrapError, modelConfigured, sourceMessageId,
         type="button" onClick={onOpenSettings}>前往模型设置</button>}
     </div>
     {messages.length > 0 && chatError && <div className="chat-notice" role="status">{chatError}</div>}
-    <div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
+    <div className="scene-bar"><label>当前场景<input aria-label="当前场景" value={scene} onChange={(event) => setScene(event.target.value)} maxLength={1000} placeholder="例如：雨夜的客厅、海边散步" /></label><div className="gift-actions"><span>互动</span>{['食物','咖啡','鲜花'].map((item) => <button key={item} type="button" onClick={() => void sendText(`我送给你一份${item}`)} disabled={!character || !modelConfigured || Boolean(requestId)}>{item}</button>)}</div></div><div className="composer" aria-label="消息输入区"><textarea aria-label="消息" value={draft}
       disabled={!character || !modelConfigured || Boolean(historyTargetId)} onChange={(event) => setDraft(event.target.value)} onKeyDown={onComposerKeyDown}
       placeholder={!character ? '先创建一位角色' : historyTargetId ? '返回最新消息后继续对话' : modelConfigured ? `给${character.name}发消息` : '请先配置聊天模型'} rows={1} maxLength={8000} />
       {requestId ? <button aria-label="停止生成" title="停止生成" type="button"

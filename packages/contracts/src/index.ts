@@ -116,6 +116,7 @@ export type ConversationContextInput = z.infer<typeof ConversationContextInputSc
 export const ChatSendInputSchema = z.object({
   text: z.string().trim().min(1).max(8000),
   clientMessageId: z.string().min(1).max(100),
+  scene: z.string().trim().max(1000).optional(),
 });
 export type ChatSendInput = z.infer<typeof ChatSendInputSchema>;
 
@@ -141,6 +142,7 @@ export const RelationshipSummarySchema = z.object({
   headline: z.string().min(1),
   description: z.string().min(1),
   mood: z.string().min(1),
+  trust: z.number().min(0).max(1),
   updatedAt: z.iso.datetime(),
 });
 export type RelationshipSummary = z.infer<typeof RelationshipSummarySchema>;

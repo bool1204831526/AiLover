@@ -699,7 +699,7 @@ function registerIpcHandlers(): void {
     activeChats.set(requestId, controller);
     setDesktopPetActivity('waiting');
     setImmediate(() => void completeChat(
-      requestId, character, userMessage, assistantMessage, controller.signal,
+      requestId, character, userMessage, assistantMessage, controller.signal, request.scene,
     ));
     const receipt = ChatSendReceiptSchema.parse({ requestId, userMessage: toChatMessage(userMessage),
       assistantMessage: toChatMessage(assistantMessage) });
@@ -941,6 +941,7 @@ async function completeChat(
   userMessage: StoredChatMessage,
   assistantMessage: StoredChatMessage,
   signal: AbortSignal,
+  sceneContext = '',
 ): Promise<void> {
   let content = '';
   let completedSuccessfully = false;
@@ -1019,7 +1020,7 @@ async function completeChat(
     const apiKey = decryptApiKey(profile.encryptedApiKey);
     for await (const delta of streamModelChat({ provider: profile.provider, endpoint: profile.endpoint,
       model: profile.model, messages: assembleChatContext(
-        character, history, 12_000, recalled, cognitionContext, recalledEpisodes,
+        character, history, 12_000, recalled, cognitionContext, recalledEpisodes, sceneContext,
       ), signal,
       ...(apiKey ? { apiKey } : {}) })) {
       if (!content) setDesktopPetActivity('running');
