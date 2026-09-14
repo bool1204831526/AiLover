@@ -33,6 +33,9 @@ jobs:
 
       - name: Run release verification
         run: pnpm release:verify
+        env:
+          # GitHub-hosted Windows runners have variable cold-start performance.
+          AILOVER_SMOKE_STARTUP_BUDGET_MS: 30000
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
