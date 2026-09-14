@@ -317,6 +317,7 @@ export type AppError = z.infer<typeof AppErrorSchema>;
 export const BootstrapResponseSchema = z.object({
   appVersion: z.string().min(1),
   userId: z.uuid(),
+  username: z.string().min(1), authenticated: z.boolean(),
   platform: z.enum(['win32', 'darwin', 'linux']),
   environment: z.enum(['development', 'test', 'production']),
   dataPath: z.string().min(1),
@@ -331,7 +332,7 @@ export const BootstrapResponseSchema = z.object({
   currentCharacter: CharacterSnapshotSchema.nullable(),
 });
 
-export const AccountCredentialsSchema = z.object({ username: z.string().trim().min(2).max(40), password: z.string().min(8).max(200) });
+export const AccountCredentialsSchema = z.object({ username: z.string().trim().min(2).max(40), password: z.string().min(8).max(200), remember: z.boolean().default(false) });
 export type AccountCredentials = z.infer<typeof AccountCredentialsSchema>;
 export const AccountSnapshotSchema = z.object({ id: z.uuid(), username: z.string(), isCurrent: z.boolean() });
 export type AccountSnapshot = z.infer<typeof AccountSnapshotSchema>;

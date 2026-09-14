@@ -66,6 +66,12 @@ function initializeUserIdentity(sqlite: Database.Database): string {
 
 export type LocalAccount = { id: string; username: string; isCurrent: boolean };
 
+export function currentLocalAccount(database: AppDatabase): { username: string; authenticated: boolean } {
+  const row = database.sqlite.prepare('SELECT display_name, password_hash FROM users WHERE id = ?').get(database.userId) as
+    { display_name: string; password_hash: string | null } | undefined;
+  return { username: row?.display_name ?? '', authenticated: Boolean(row?.password_hash) };
+}
+
 function passwordHash(password: string): string {
   const salt = randomBytes(16).toString('hex');
   return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
@@ -87,6 +93,11 @@ export function listLocalAccounts(database: AppDatabase): LocalAccount[] {
 }
 
 export function registerLocalAccount(database: AppDatabase, username: string, password: string): LocalAccount {
+  const current = database.sqlite.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(database.userId) as { id: string; password_hash: string | null } | undefined;
+  if (current && !current.password_hash) {
+    database.sqlite.prepare('UPDATE users SET display_name = ?, password_hash = ? WHERE id = ?').run(username, passwordHash(password), current.id);
+    return { id: current.id, username, isCurrent: true };
+  }
   const id = randomUUID();
   database.sqlite.prepare('INSERT INTO users(id, display_name, locale, timezone, created_at, password_hash) VALUES (?, ?, ?, ?, ?, ?)')
     .run(id, username, 'zh-CN', 'Asia/Shanghai', new Date().toISOString(), passwordHash(password));

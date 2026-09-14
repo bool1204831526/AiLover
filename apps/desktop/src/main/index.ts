@@ -44,7 +44,7 @@ import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabas
   SqliteFutureIntentionRepository,
   SqliteSelfModelRepository,
   SqliteDesktopPetWindowStateRepository,
-  validateRestoredDatabase, listLocalAccounts, loginLocalAccount, logoutLocalAccount, registerLocalAccount } from '@ailover/persistence';
+  validateRestoredDatabase, currentLocalAccount, listLocalAccounts, loginLocalAccount, logoutLocalAccount, registerLocalAccount } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
@@ -550,11 +550,15 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.accountLogout, async () => {
     logoutLocalAccount(database);
     restartApplication();
-  });  ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
+  });
+  ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
     const current = await characterService.findCurrent();
+    const account = currentLocalAccount(database);
     const response = BootstrapResponseSchema.parse({
       appVersion: app.getVersion(),
       userId: database.userId,
+      username: account.username,
+      authenticated: account.authenticated,
       platform: process.platform,
       environment: config.environment,
       dataPath: app.getPath('userData'),

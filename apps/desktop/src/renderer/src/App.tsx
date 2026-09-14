@@ -85,12 +85,13 @@ export function App(): React.JSX.Element {
   const [visual, setVisual] = useState<CharacterVisualProfile | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [chatSourceMessageId, setChatSourceMessageId] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   useEffect(() => {
     const api = window.ailover;
     if (!api) {
       setBootstrap({ appVersion: 'preview', platform: 'win32', environment: 'development',
-        userId: '00000000-0000-4000-8000-000000000000', dataPath: 'browser-preview', capabilities: { character: true, chat: false, memory: false },
+        userId: '00000000-0000-4000-8000-000000000000', username: '', authenticated: false, dataPath: 'browser-preview', capabilities: { character: true, chat: false, memory: false },
         setup: { modelConfigured: false },
         currentCharacter: null });
       setOnboardingOpen(true);
@@ -98,6 +99,7 @@ export function App(): React.JSX.Element {
     }
     void api.bootstrap().then((result) => {
       setBootstrap(result);
+      if (!result.authenticated) return;
       setCharacter(result.currentCharacter);
       void api.character.list().then(setCharacters).catch(() => undefined);
       setOnboardingOpen(!result.currentCharacter);
@@ -127,6 +129,7 @@ export function App(): React.JSX.Element {
     }
   }
 
+  if (bootstrap && !bootstrap.authenticated) return <AuthGate mode={authMode} onModeChange={setAuthMode} />;
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark" aria-label="AiLover"><span className="brand-symbol">A</span><span>AiLover</span></div>
@@ -882,8 +885,8 @@ function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void })
     setAccountMessage(null);
     try {
       if (!window.ailover) return;
-      if (action === 'register') await window.ailover.account.register({ username: accountUsername, password: accountPassword });
-      else await window.ailover.account.login({ username: accountUsername, password: accountPassword });
+      if (action === 'register') await window.ailover.account.register({ username: accountUsername, password: accountPassword, remember: false });
+      else await window.ailover.account.login({ username: accountUsername, password: accountPassword, remember: false });
       setAccountMessage('账户已切换，应用正在重新启动。');
     } catch (error) { setAccountMessage(error instanceof Error ? error.message : '账户操作失败。'); }
   }
@@ -1060,6 +1063,19 @@ function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void })
     </section></div></>;
 }
 
+function AuthGate({ mode, onModeChange }: { mode: 'login' | 'register'; onModeChange(mode: 'login' | 'register'): void }): React.JSX.Element {
+  const [username, setUsername] = useState(() => localStorage.getItem('ailover.saved.username') ?? '');
+  const [password, setPassword] = useState(() => localStorage.getItem('ailover.saved.password') ?? '');
+  const [remember, setRemember] = useState(() => Boolean(localStorage.getItem('ailover.saved.password')));
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setBusy(true); setMessage(null);
+    try { if (!window.ailover) return; const input = { username, password, remember }; if (mode === 'register') await window.ailover.account.register(input); else await window.ailover.account.login(input); if (remember) { localStorage.setItem('ailover.saved.username', username); localStorage.setItem('ailover.saved.password', password); } else { localStorage.removeItem('ailover.saved.username'); localStorage.removeItem('ailover.saved.password'); } setMessage('账户已保存，应用正在启动。'); }
+    catch (error) { setMessage(error instanceof Error ? error.message : '账户操作失败。'); } finally { setBusy(false); }
+  }
+  return <div className="onboarding-shell auth-gate" role="dialog" aria-modal="true"><aside className="onboarding-progress"><div className="brand-mark"><span className="brand-symbol">A</span><span>AiLover</span></div></aside><section className="onboarding-content"><div className="onboarding-form"><span className="eyebrow">本地账户</span><h1>{mode === 'login' ? '登录 AiLover' : '创建本地账户'}</h1><p>登录后才能使用角色、对话、记忆和桌宠功能。账户数据只保存在这台电脑上。</p><form onSubmit={submit}><label><span>用户名</span><input required minLength={2} maxLength={40} value={username} onChange={(event) => setUsername(event.target.value)} /></label><label><span>密码</span><input required minLength={8} maxLength={200} type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><label className="toggle-setting"><span>记住密码</span><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /></label>{message && <p className="form-error">{message}</p>}<button className="primary-action" disabled={busy} type="submit">{busy ? '正在处理' : mode === 'login' ? '登录' : '注册并进入'}</button></form><button className="text-action" type="button" onClick={() => { setMessage(null); onModeChange(mode === 'login' ? 'register' : 'login'); }}>{mode === 'login' ? '首次使用？注册账户' : '已有账户？返回登录'}</button></div></section></div>;
+}
 function CharacterPortrait({ character, visual }: {
   character: CharacterSnapshot; visual: CharacterVisualProfile | null;
 }): React.JSX.Element {

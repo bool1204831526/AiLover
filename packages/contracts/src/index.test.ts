@@ -12,6 +12,7 @@ describe('shared contracts', () => {
     const result = BootstrapResponseSchema.parse({
       appVersion: '0.1.0',
       userId: '9db7303d-cc9d-4e44-a908-98d94b7dff93',
+      username: '测试用户', authenticated: true,
       platform: 'win32',
       environment: 'test',
       dataPath: 'C:\\AiLoverData',
