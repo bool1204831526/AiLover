@@ -297,7 +297,7 @@ export const CharacterSnapshotSchema = CharacterDraftSchema.extend({
 
 export type CharacterSnapshot = z.infer<typeof CharacterSnapshotSchema>;
 export const CharacterCardImportResultSchema = z.object({ character: CharacterSnapshotSchema,
-  environment: z.string().max(3000).nullable() });
+  environment: z.string().max(3000).nullable(), recognizedUser: z.boolean() });
 export type CharacterCardImportResult = z.infer<typeof CharacterCardImportResultSchema>;
 
 export const AppErrorSchema = z.object({
@@ -312,6 +312,7 @@ export type AppError = z.infer<typeof AppErrorSchema>;
 
 export const BootstrapResponseSchema = z.object({
   appVersion: z.string().min(1),
+  userId: z.uuid(),
   platform: z.enum(['win32', 'darwin', 'linux']),
   environment: z.enum(['development', 'test', 'production']),
   dataPath: z.string().min(1),

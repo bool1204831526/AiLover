@@ -7,7 +7,8 @@ import { basename, extname, join, resolve, sep } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray } from 'electron';
 
 import {
-  BootstrapResponseSchema, CharacterDraftSchema, CharacterLoreSchema, CharacterSnapshotSchema, ChatMessageSchema,
+  BootstrapResponseSchema, CharacterCardImportResultSchema, CharacterDraftSchema, CharacterLoreSchema,
+  CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, ConversationContextInputSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
   ModelProfileSnapshotSchema, RelationshipSummarySchema, CharacterVisualProfileSchema,
@@ -19,7 +20,8 @@ import {
   type ChatStreamEvent, type DesktopPetRuntimeState,
 } from '@ailover/contracts';
 import { CHARACTER_CARD_TABLES, createBackupDocument, createCharacterCardDocument, parseBackupDocument,
-  parseCharacterCardDocument, readAssetEntries, type CharacterCardData } from '@ailover/backup';
+  parseCharacterCardDocument, prepareCharacterCardImportData, readAssetEntries,
+  type CharacterCardData } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, createSelfModelEntries, projectCognition,
   relationshipSummary, summarizePersonalityEvidence } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, fitDesktopPetBounds, hasOutOfCharacterLeakage, shouldSendCompanionPrompt,
@@ -470,8 +472,10 @@ function collectCharacterCardData(characterId: string): CharacterCardData {
   return data;
 }
 
-function importCharacterCardData(data: CharacterCardData, assetPaths: Map<string, string>, newCharacterId: string): string {
-  const rows = (table: string) => data[table] ?? [];
+function importCharacterCardData(data: CharacterCardData, assetPaths: Map<string, string>,
+  newCharacterId: string, recognizedUser: boolean): string {
+  const importedData = prepareCharacterCardImportData(data, recognizedUser);
+  const rows = (table: string) => importedData[table] ?? [];
   if (rows('characters').length !== 1) throw new Error('角色卡必须包含且只能包含一个角色。');
   const oldCharacterId = String(rows('characters')[0]!.id);
   const makeMap = (table: string) => new Map(rows(table).map((row) => [String(row.id), randomUUID()]));
@@ -489,7 +493,7 @@ function importCharacterCardData(data: CharacterCardData, assetPaths: Map<string
   const transform = (table: string, source: CardRow): CardRow => {
     const row = { ...source };
     if ('character_id' in row) row.character_id = newCharacterId;
-    if (table === 'characters') { row.id = newCharacterId; row.user_id = 'local-user'; row.status = 'archived';
+    if (table === 'characters') { row.id = newCharacterId; row.user_id = database.userId; row.status = 'archived';
       row.name = `${String(row.name).slice(0, 35)}（导入）`; row.updated_at = new Date().toISOString(); }
     else if (idMaps[table] && row.id !== null) row.id = idMaps[table]!.get(String(row.id))!;
     else if ('id' in row && !['memory_sources', 'memory_recalls', 'personality_evidence', 'episode_recalls'].includes(table)) row.id = randomUUID();
@@ -534,6 +538,7 @@ function registerIpcHandlers(): void {
     const current = await characterService.findCurrent();
     const response = BootstrapResponseSchema.parse({
       appVersion: app.getVersion(),
+      userId: database.userId,
       platform: process.platform,
       environment: config.environment,
       dataPath: app.getPath('userData'),
@@ -596,7 +601,7 @@ function registerIpcHandlers(): void {
       data: await readFile(String(row.local_path)),
     })));
     const document = createCharacterCardDocument({ appVersion: app.getVersion(), createdAt: new Date(),
-      characterName: character.name, data, assets,
+      characterName: character.name, familiarUserId: database.userId, data, assets,
       ...(typeof environment === 'string' ? { environment: environment.slice(0, 3000) } : {}) });
     await writeFile(destination.filePath, document, 'utf8');
     return DataOperationResultSchema.parse({ ok: true, message: '角色卡已导出，包含角色资料、记忆、关系、对话和角色资产。',
@@ -609,6 +614,7 @@ function registerIpcHandlers(): void {
     const sourcePath = selection.filePaths[0];
     if (selection.canceled || !sourcePath) return null;
     const parsed = parseCharacterCardDocument(await readFile(sourcePath, 'utf8'));
+    const recognizedUser = parsed.familiarUserId === database.userId;
     const newCharacterId = randomUUID(); const directory = join(assetRoot, newCharacterId);
     const assetPaths = new Map<string, string>();
     try {
@@ -618,11 +624,12 @@ function registerIpcHandlers(): void {
         const destination = join(directory, name); await writeFile(destination, asset.data);
         assetPaths.set(oldAssetId, destination);
       }
-      importCharacterCardData(parsed.data, assetPaths, newCharacterId);
+      importCharacterCardData(parsed.data, assetPaths, newCharacterId, recognizedUser);
       await characterService.activate(newCharacterId as Character['id']);
       const current = await characterService.findCurrent();
       if (!current) throw new Error('角色卡导入后无法读取角色。');
-      return { character: toCharacterSnapshot(current), environment: parsed.environment };
+      return CharacterCardImportResultSchema.parse({ character: toCharacterSnapshot(current),
+        environment: recognizedUser ? parsed.environment : null, recognizedUser });
     } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
   });
   ipcMain.handle(IPC_CHANNELS.characterLoreGenerate, async (_event, input: unknown) => {
@@ -1185,7 +1192,7 @@ async function completeChat(
     }
   } finally {
     try {
-      await memoryService.capture({ userId: 'local-user', characterId: character.id,
+      await memoryService.capture({ userId: database.userId, characterId: character.id,
         messageId: userMessage.id, text: userMessage.content, now: userMessage.createdAt });
       const activeMemories = await memoryRepository.listActive(character.id);
       const generated = intentionsFromMemories(activeMemories, { next: randomUUID }, userMessage.createdAt);
@@ -1200,7 +1207,8 @@ async function completeChat(
     }
     let capturedEpisode = null;
     try {
-      capturedEpisode = await episodicMemoryService.capture({ characterId: character.id, characterName: character.name,
+      capturedEpisode = await episodicMemoryService.capture({ userId: database.userId,
+        characterId: character.id, characterName: character.name,
         conversationId: assistantMessage.conversationId, userMessageId: userMessage.id,
         userText: userMessage.content, ...(completedSuccessfully
           ? { aiMessageId: assistantMessage.id, aiText: content } : {}),
@@ -1240,7 +1248,7 @@ async function captureStructuredMemory(characterId: string, userMessage: StoredC
       timeoutMs: 8_000, ...(apiKey ? { apiKey } : {}) });
     const candidates = validateStructuredMemoryProposals(proposals, sourceText, userMessage.createdAt);
     if (!candidates.length) return;
-    await memoryService.captureCandidates({ userId: 'local-user', characterId,
+    await memoryService.captureCandidates({ userId: database.userId, characterId,
       messageId: userMessage.id, now: userMessage.createdAt }, candidates);
   } catch (error) {
     logger.warn({ error }, 'Structured memory extraction failed; local capture remains available');

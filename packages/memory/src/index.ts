@@ -352,6 +352,7 @@ export class EpisodicMemoryService {
   }) {}
 
   public async capture(input: {
+    userId: string;
     characterId: string;
     characterName: string;
     conversationId: string;
@@ -408,6 +409,7 @@ export class EpisodicMemoryService {
 }
 
 export function extractEpisodeCandidate(input: {
+  userId: string;
   characterId: string;
   characterName: string;
   userText: string;
@@ -460,7 +462,7 @@ export function extractEpisodeCandidate(input: {
     ? 'first:first-conversation'
     : `${kind}:${normalize(userAction).slice(0, 96)}`;
   return { kind, fingerprint, title, summary, context: null,
-    participants: ['local-user', input.characterId], userAction, aiAction,
+    participants: [input.userId, input.characterId], userAction, aiAction,
     userEmotion, aiEmotion: input.aiEmotion ?? null, relationshipRelevance,
     emotionalWeight, importance, confidence: 0.9, tags: [kind] };
 }

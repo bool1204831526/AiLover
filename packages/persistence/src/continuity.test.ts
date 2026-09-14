@@ -74,7 +74,7 @@ describe('long-term continuity', () => {
       role: 'assistant', content: '未完成', status: 'streaming', model: 'model-a',
       createdAt: new Date('2026-09-11T08:00:01Z') });
     await new MemoryService({ repository: new SqliteMemoryRepository(first),
-      idGenerator: { next: () => 'continuity-memory' } }).capture({ userId: 'local-user',
+      idGenerator: { next: () => 'continuity-memory' } }).capture({ userId: first.userId,
       characterId: character.id, messageId: 'continuity-source', text: '我喜欢手冲咖啡，也很喜欢你',
       now: sourceAt });
     let cognitionId = 0;

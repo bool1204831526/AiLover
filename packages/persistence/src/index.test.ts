@@ -41,9 +41,12 @@ describe('SqliteCharacterRepository', () => {
         arrivalStory: '被月海中的次元裂缝带到 AiLover' },
     }, { idGenerator: { next: () => 'character-1' }, clock: { now: () => new Date('2026-09-11T00:00:00Z') } });
     const first = openAppDatabase(path);
+    expect(first.userId).toMatch(/^[0-9a-f-]{36}$/);
+    const userId = first.userId;
     await new SqliteCharacterRepository(first).save(character);
     first.close();
     const second = openAppDatabase(path);
+    expect(second.userId).toBe(userId);
     const restored = await new SqliteCharacterRepository(second).findCurrent();
     expect(restored?.name).toBe('艾琳');
     expect(restored?.personalityBaseline.warmth).toBe(0.9);
@@ -54,6 +57,36 @@ describe('SqliteCharacterRepository', () => {
     expect((await new SqliteCharacterRepository(second).findCurrent())?.lore.coreMotivations)
       .toBe('在这里建立新的生活');
     second.close();
+  });
+
+  it('migrates legacy local-user ownership without losing characters', async () => {
+    const path = join(tmpdir(), 'ailover-legacy-user-' + randomUUID() + '.sqlite');
+    paths.push(path);
+    const character = createCharacter({ name: '旧角色', gender: '女', ageSetting: '成年',
+      identity: '旅人', background: '旧世界', appearance: '银发', speakingStyle: '沉静',
+      personalityTemplateId: 'reserved' }, { idGenerator: { next: () => 'legacy-character' },
+      clock: { now: () => new Date('2026-09-01T00:00:00Z') } });
+    const legacy = openAppDatabase(path);
+    const generatedUserId = legacy.userId;
+    await new SqliteCharacterRepository(legacy).save(character);
+    legacy.sqlite.pragma('foreign_keys = OFF');
+    legacy.sqlite.transaction(() => {
+      legacy.sqlite.prepare("INSERT INTO users(id, display_name, locale, timezone, created_at) SELECT 'local-user', display_name, locale, timezone, created_at FROM users WHERE id = ?")
+        .run(generatedUserId);
+      legacy.sqlite.prepare("UPDATE characters SET user_id = 'local-user' WHERE user_id = ?")
+        .run(generatedUserId);
+      legacy.sqlite.prepare("DELETE FROM app_identity WHERE id = 'current-user'").run();
+      legacy.sqlite.prepare("DELETE FROM users WHERE id = ?").run(generatedUserId);
+    })();
+    legacy.sqlite.pragma('foreign_keys = ON');
+    legacy.close();
+
+    const upgraded = openAppDatabase(path);
+    expect(upgraded.userId).not.toBe('local-user');
+    expect(upgraded.userId).not.toBe(generatedUserId);
+    expect((await new SqliteCharacterRepository(upgraded).findCurrent())?.name).toBe('旧角色');
+    expect(upgraded.sqlite.prepare("SELECT id FROM users WHERE id = 'local-user'").get()).toBeUndefined();
+    upgraded.close();
   });
 });
 
@@ -105,7 +138,7 @@ describe('database migrations', () => {
       personalityTemplateId: 'reserved' }, { idGenerator: { next: () => 'legacy-character' },
       clock: { now: () => new Date('2026-09-01T00:00:00Z') } });
     await new SqliteCharacterRepository(legacy).save(legacyCharacter);
-    legacy.sqlite.prepare("UPDATE users SET display_name = '迁移保留' WHERE id = 'local-user'").run();
+    legacy.sqlite.prepare("UPDATE users SET display_name = '迁移保留' WHERE id = ?").run(legacy.userId);
     legacy.sqlite.exec('DROP TABLE character_lore');
     legacy.sqlite.exec('DROP TABLE memory_resolutions');
     legacy.sqlite.prepare('DELETE FROM schema_migrations WHERE version >= 16').run();
@@ -113,7 +146,7 @@ describe('database migrations', () => {
     const upgraded = openAppDatabase(path);
     expect(upgraded.sqlite.prepare('SELECT MAX(version) AS version FROM schema_migrations').get())
       .toEqual({ version: CURRENT_SCHEMA_VERSION });
-    expect(upgraded.sqlite.prepare("SELECT display_name FROM users WHERE id = 'local-user'").get())
+    expect(upgraded.sqlite.prepare("SELECT display_name FROM users WHERE id = ?").get(upgraded.userId))
       .toEqual({ display_name: '迁移保留' });
     expect(upgraded.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_resolutions'").get())
       .toEqual({ name: 'memory_resolutions' });
@@ -256,7 +289,7 @@ describe('SqliteEpisodicMemoryRepository', () => {
       createdAt: new Date('2026-09-12T01:00:00Z') });
     const captured = await new EpisodicMemoryService({
       repository: new SqliteEpisodicMemoryRepository(first), idGenerator: { next: () => 'episode-1' },
-    }).capture({ characterId: character.id, characterName: character.name,
+    }).capture({ userId: first.userId, characterId: character.id, characterName: character.name,
       conversationId: 'episode-conversation', userMessageId: 'episode-user',
       userText: '我们一起完成面试准备了', aiMessageId: 'episode-ai', aiText: '你坚持下来了。',
       relatedMemoryIds: ['memory-1'], now: at });
@@ -304,11 +337,11 @@ describe('SqliteMemoryRepository', () => {
     const memoryRepository = new SqliteMemoryRepository(database);
     const service = new MemoryService({ repository: memoryRepository,
       idGenerator: { next: () => 'memory-fts' } });
-    await service.capture({ userId: 'local-user', characterId: character.id,
+    await service.capture({ userId: database.userId, characterId: character.id,
       messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
-    await service.capture({ userId: 'local-user', characterId: character.id,
+    await service.capture({ userId: database.userId, characterId: character.id,
       messageId: 'source-message-2', text: '我喜欢手冲咖啡', now: new Date('2026-09-02T00:00:00Z') });
-    await service.capture({ userId: 'local-user', characterId: character.id,
+    await service.capture({ userId: database.userId, characterId: character.id,
       messageId: 'source-message', text: '我喜欢手冲咖啡', now: firstSeen });
     const recalled = await service.recall({ characterId: character.id, queryMessageId: 'query-message',
       query: '手冲咖啡', now: new Date('2026-09-11T00:00:00Z') });
@@ -343,7 +376,7 @@ describe('SqliteMemoryRepository', () => {
       createdAt: new Date('2026-09-12T00:00:00Z') });
     const conflictingService = new MemoryService({ repository: memoryRepository,
       idGenerator: { next: () => 'memory-conflict' } });
-    await conflictingService.capture({ userId: 'local-user', characterId: character.id,
+    await conflictingService.capture({ userId: database.userId, characterId: character.id,
       messageId: 'source-message-conflict', text: '我不喜欢手冲咖啡', now: new Date('2026-09-12T00:00:00Z') });
     expect((await memoryRepository.listForCenter(character.id)).map(({ state }) => state).sort())
       .toEqual(['active', 'superseded']);
@@ -439,7 +472,7 @@ describe('SqliteCognitionRepository', () => {
     const database = openAppDatabase(path);
     database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
       speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run('character-1', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
+      .run('character-1', database.userId, '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
     const repository = new SqliteFutureIntentionRepository(database);
     const intention: FutureIntention = { id: 'intention-1', description: '下次关心面试结果',
       triggerType: 'return', triggerData: { keywords: ['面试'] }, priority: 0.8,
@@ -465,7 +498,7 @@ describe('SqliteCognitionRepository', () => {
     const database = openAppDatabase(path);
     database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
       speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run('character-consolidated', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
+      .run('character-consolidated', database.userId, '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
     const repository = new SqliteConsolidatedMemoryRepository(database);
     const insight: ConsolidatedMemory = { id: 'insight-1', type: 'behavior_pattern',
       statement: '用户倾向于一起准备重要事项。', confidence: 0.8, importance: 0.75,
@@ -483,7 +516,7 @@ describe('SqliteCognitionRepository', () => {
     const database = openAppDatabase(path);
     database.sqlite.prepare(`INSERT INTO characters(id, user_id, name, gender, age_setting, identity, background, appearance,
       speaking_style, personality_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run('character-self', 'local-user', '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
+      .run('character-self', database.userId, '艾琳', '女', '成年', 'AI', '', '', '温柔', 'gentle', 'active', new Date().toISOString(), new Date().toISOString());
     const repository = new SqliteSelfModelRepository(database);
     const entry: Omit<SelfModelEntry, 'version'> = { id: 'self-1', characterId: 'character-self',
       category: 'value', statement: '陪伴和情绪安全对我很重要。', confidence: 0.85,

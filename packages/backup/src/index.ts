@@ -24,17 +24,34 @@ export const CHARACTER_CARD_TABLES = [
 ] as const;
 const CardScalarSchema = z.union([z.string(), z.number(), z.null()]);
 const CardRowSchema = z.record(z.string().min(1).max(100), CardScalarSchema);
-const CharacterCardSchema = z.object({ format: z.literal('ailover-character'), version: z.literal(1),
+const CharacterCardBaseSchema = z.object({ format: z.literal('ailover-character'),
   appVersion: z.string().min(1).max(50), createdAt: z.iso.datetime(), characterName: z.string().min(1).max(40), environment: z.string().max(3000).nullable(),
   data: z.record(z.string(), z.array(CardRowSchema).max(100_000)).superRefine((data, context) => {
     const allowed = new Set<string>(CHARACTER_CARD_TABLES);
     if (Object.keys(data).some((table) => !allowed.has(table))) context.addIssue({ code: 'custom', message: '角色卡包含未知数据表。' });
   }),
   assets: z.array(BackupEntrySchema).max(MAX_ASSETS),
-}).strict();
+});
+const CharacterCardSchema = z.discriminatedUnion('version', [
+  CharacterCardBaseSchema.extend({ version: z.literal(1) }).strict(),
+  CharacterCardBaseSchema.extend({ version: z.literal(2), familiarUserId: z.uuid() }).strict(),
+]);
 export type CharacterCardData = Record<string, Record<string, string | number | null>[]>;
+const STRANGER_CARD_TABLES = new Set([
+  'characters', 'personality_baselines', 'character_lore', 'character_visual_identities', 'assets',
+]);
+
+export function prepareCharacterCardImportData(
+  data: CharacterCardData, recognizedUser: boolean,
+): CharacterCardData {
+  if (recognizedUser) return data;
+  return Object.fromEntries(
+    Object.entries(data).filter(([table]) => STRANGER_CARD_TABLES.has(table)),
+  );
+}
 export type ParsedCharacterCard = { appVersion: string; createdAt: Date; characterName: string;
-  data: CharacterCardData; assets: BackupBinaryEntry[]; environment: string | null };
+  data: CharacterCardData; assets: BackupBinaryEntry[]; environment: string | null;
+  familiarUserId: string | null };
 const BackupDocumentSchema = z.object({
   format: z.literal('ailover-backup'),
   version: z.literal(1),
@@ -108,12 +125,13 @@ export function parseBackupDocument(source: string): ParsedBackup {
 }
 
 export function createCharacterCardDocument(input: { appVersion: string; createdAt: Date;
-  characterName: string; data: CharacterCardData; assets: BackupBinaryEntry[]; environment?: string }): string {
+  characterName: string; familiarUserId: string; data: CharacterCardData;
+  assets: BackupBinaryEntry[]; environment?: string }): string {
   const total = input.assets.reduce((sum, asset) => sum + asset.data.byteLength, 0);
   if (total > MAX_TOTAL_BYTES) throw new Error('角色卡资产超过 512 MB 限制。');
-  return JSON.stringify(CharacterCardSchema.parse({ format: 'ailover-character', version: 1,
+  return JSON.stringify(CharacterCardSchema.parse({ format: 'ailover-character', version: 2,
     appVersion: input.appVersion, createdAt: input.createdAt.toISOString(), characterName: input.characterName,
-    environment: input.environment ?? null, data: input.data,
+    familiarUserId: input.familiarUserId, environment: input.environment ?? null, data: input.data,
     assets: input.assets.map((asset) => encodeEntry(asset, MAX_FILE_BYTES)) }));
 }
 
@@ -127,7 +145,8 @@ export function parseCharacterCardDocument(source: string): ParsedCharacterCard 
     return { path: entry.path, data };
   });
   return { appVersion: document.appVersion, createdAt: new Date(document.createdAt),
-    characterName: document.characterName, environment: document.environment, data: document.data, assets };
+    characterName: document.characterName, environment: document.environment, data: document.data, assets,
+    familiarUserId: document.version === 2 ? document.familiarUserId : null };
 }
 export async function readAssetEntries(root: string): Promise<BackupBinaryEntry[]> {
   const entries: BackupBinaryEntry[] = [];

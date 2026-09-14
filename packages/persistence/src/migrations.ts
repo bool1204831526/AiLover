@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 18;
+export const CURRENT_SCHEMA_VERSION = 19;
 
 const migrations = [{
   version: 1,
@@ -437,6 +437,14 @@ const migrations = [{
 }, {
   version: 18,
   sql: `DROP INDEX IF EXISTS characters_one_active;`,
+}, {
+  version: 19,
+  sql: `
+    CREATE TABLE IF NOT EXISTS app_identity (
+      id TEXT PRIMARY KEY NOT NULL CHECK(id = 'current-user'),
+      user_id TEXT NOT NULL REFERENCES users(id)
+    );
+  `,
 }] as const;
 
 export function migrate(database: Database.Database): void {

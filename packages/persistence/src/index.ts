@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 
@@ -21,13 +22,47 @@ import type { CompanionSettings } from '@ailover/contracts';
 import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
 import { characterLore, characters, conversations, messages, modelProfiles, personalityBaselines } from './schema';
 
-const LOCAL_USER_ID = 'local-user';
+const LEGACY_LOCAL_USER_ID = 'local-user';
 
 export type AppDatabase = {
   sqlite: Database.Database;
   orm: BetterSQLite3Database;
+  userId: string;
   close(): void;
 };
+
+function initializeUserIdentity(sqlite: Database.Database): string {
+  const stored = sqlite.prepare("SELECT user_id FROM app_identity WHERE id = 'current-user'")
+    .get() as { user_id: string } | undefined;
+  if (stored) return stored.user_id;
+
+  const legacy = sqlite.prepare('SELECT * FROM users WHERE id = ?').get(LEGACY_LOCAL_USER_ID) as
+    { display_name: string; locale: string; timezone: string; created_at: string } | undefined;
+  const existing = sqlite.prepare('SELECT id FROM users ORDER BY created_at LIMIT 1').get() as
+    { id: string } | undefined;
+  const userId = legacy ? randomUUID() : existing?.id ?? randomUUID();
+
+  if (legacy) {
+    sqlite.pragma('foreign_keys = OFF');
+    try {
+      sqlite.transaction(() => {
+        sqlite.prepare(`INSERT INTO users(id, display_name, locale, timezone, created_at)
+          VALUES (?, ?, ?, ?, ?)`).run(userId, legacy.display_name, legacy.locale, legacy.timezone, legacy.created_at);
+        for (const table of ['characters', 'conversations', 'memories']) {
+          sqlite.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`).run(userId, LEGACY_LOCAL_USER_ID);
+        }
+        sqlite.prepare('DELETE FROM users WHERE id = ?').run(LEGACY_LOCAL_USER_ID);
+      })();
+    } finally { sqlite.pragma('foreign_keys = ON'); }
+  } else if (!existing) {
+    sqlite.prepare(`INSERT INTO users(id, display_name, locale, timezone, created_at)
+      VALUES (?, ?, ?, ?, ?)`).run(userId, '本地用户', 'zh-CN', 'Asia/Shanghai', new Date().toISOString());
+  }
+  sqlite.prepare("INSERT INTO app_identity(id, user_id) VALUES ('current-user', ?)").run(userId);
+  const violation = sqlite.prepare('PRAGMA foreign_key_check').get();
+  if (violation) throw new Error('用户身份迁移后数据库关联校验失败。');
+  return userId;
+}
 
 export function openAppDatabase(path: string): AppDatabase {
   mkdirSync(dirname(path), { recursive: true });
@@ -36,12 +71,10 @@ export function openAppDatabase(path: string): AppDatabase {
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('busy_timeout = 5000');
   migrate(sqlite);
+  const userId = initializeUserIdentity(sqlite);
   sqlite.prepare("UPDATE messages SET status = 'failed' WHERE status = 'streaming'").run();
-  sqlite.prepare(`INSERT OR IGNORE INTO users(id, display_name, locale, timezone, created_at)
-    VALUES (?, ?, ?, ?, ?)`).run(
-    LOCAL_USER_ID, '本地用户', 'zh-CN', 'Asia/Shanghai', new Date().toISOString(),
-  );
-  return { sqlite, orm: drizzle(sqlite), close: () => { if (sqlite.open) sqlite.close(); } };
+  return { sqlite, orm: drizzle(sqlite), userId,
+    close: () => { if (sqlite.open) sqlite.close(); } };
 }
 
 export async function createSanitizedDatabaseSnapshot(
@@ -103,7 +136,7 @@ export class SqliteCharacterRepository implements CharacterRepository {
   public async save(character: Character): Promise<void> {
     this.database.sqlite.transaction(() => {
       this.database.orm.insert(characters).values({
-        id: character.id, userId: LOCAL_USER_ID, name: character.name, gender: character.gender,
+        id: character.id, userId: this.database.userId, name: character.name, gender: character.gender,
         ageSetting: character.ageSetting, identity: character.identity, background: character.background,
         appearance: character.appearance, speakingStyle: character.speakingStyle,
         personalityTemplateId: character.personalityTemplateId, status: 'active',
@@ -126,29 +159,29 @@ export class SqliteCharacterRepository implements CharacterRepository {
   }
 
   public async findCurrent(): Promise<Character | null> {
-    return this.find(and(eq(characters.userId, LOCAL_USER_ID), eq(characters.status, 'active')));
+    return this.find(and(eq(characters.userId, this.database.userId), eq(characters.status, 'active')));
   }
 
   public async list(): Promise<Character[]> {
     const rows = this.database.orm.select().from(characters)
       .innerJoin(personalityBaselines, eq(characters.id, personalityBaselines.characterId))
       .innerJoin(characterLore, eq(characters.id, characterLore.characterId))
-      .where(eq(characters.userId, LOCAL_USER_ID)).all();
+      .where(eq(characters.userId, this.database.userId)).all();
     return rows.map((row) => this.toCharacter(row));
   }
 
   public async activate(id: CharacterId): Promise<boolean> {
     const changed = this.database.sqlite.transaction(() => {
       this.database.sqlite.prepare("UPDATE characters SET status = 'archived' WHERE user_id = ? AND status = 'active'")
-        .run(LOCAL_USER_ID);
+        .run(this.database.userId);
       return this.database.sqlite.prepare("UPDATE characters SET status = 'active', updated_at = ? WHERE id = ? AND user_id = ?")
-        .run(new Date().toISOString(), id, LOCAL_USER_ID).changes;
+        .run(new Date().toISOString(), id, this.database.userId).changes;
     })();
     return changed > 0;
   }
 
   public async delete(id: CharacterId): Promise<boolean> {
-    const exists = this.database.sqlite.prepare('SELECT 1 FROM characters WHERE id = ? AND user_id = ?').get(id, LOCAL_USER_ID);
+    const exists = this.database.sqlite.prepare('SELECT 1 FROM characters WHERE id = ? AND user_id = ?').get(id, this.database.userId);
     if (!exists) return false;
     this.database.sqlite.pragma('foreign_keys = OFF');
     try {
@@ -168,7 +201,7 @@ export class SqliteCharacterRepository implements CharacterRepository {
           'episodic_memories', 'memories', 'conversations', 'personality_baselines']) {
           this.database.sqlite.prepare(`DELETE FROM ${table} WHERE character_id = ?`).run(id);
         }
-        this.database.sqlite.prepare('DELETE FROM characters WHERE id = ? AND user_id = ?').run(id, LOCAL_USER_ID);
+        this.database.sqlite.prepare('DELETE FROM characters WHERE id = ? AND user_id = ?').run(id, this.database.userId);
       })();
     } finally { this.database.sqlite.pragma('foreign_keys = ON'); }
     return true;
@@ -306,7 +339,7 @@ export class SqliteConversationRepository implements ConversationRepository {
 
   public async create(conversation: StoredConversation): Promise<void> {
     this.database.orm.insert(conversations).values({
-      id: conversation.id, userId: LOCAL_USER_ID, characterId: conversation.characterId,
+      id: conversation.id, userId: this.database.userId, characterId: conversation.characterId,
       title: conversation.title, startedAt: conversation.startedAt.toISOString(),
       lastMessageAt: conversation.lastMessageAt.toISOString(),
     }).run();

@@ -90,7 +90,7 @@ export function App(): React.JSX.Element {
     const api = window.ailover;
     if (!api) {
       setBootstrap({ appVersion: 'preview', platform: 'win32', environment: 'development',
-        dataPath: 'browser-preview', capabilities: { character: true, chat: false, memory: false },
+        userId: '00000000-0000-4000-8000-000000000000', dataPath: 'browser-preview', capabilities: { character: true, chat: false, memory: false },
         setup: { modelConfigured: false },
         currentCharacter: null });
       setOnboardingOpen(true);
@@ -145,14 +145,14 @@ export function App(): React.JSX.Element {
       </div>}
     </section>
     <section className="conversation-panel">
-      {activeSection === 'settings' ? <ModelSettings onSaved={() =>
+      {activeSection === 'settings' ? <ModelSettings userId={bootstrap?.userId ?? ''} onSaved={() =>
         setBootstrap((current) => current ? { ...current, setup: { modelConfigured: true } } : current)} />
         : activeSection === 'relationship'
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
             onCharacterChange={(value) => { setCharacter(value); setCharacters((current) => current.map((item) => item.id === value.id ? value : item)); }}
             characters={characters} onExport={async () => { const result = await window.ailover?.character.exportCard(character ? window.localStorage.getItem(`ailover.scene.${character.id}`) ?? undefined : undefined); if (result) window.alert(result.message); }}
-            onImport={async () => { const result = await window.ailover?.character.importCard(); if (result) { const value = result.character; if (result.environment) window.localStorage.setItem(`ailover.scene.${value.id}`, result.environment); setCharacter(value); setCharacters(await window.ailover?.character.list() ?? [value]); } }}
+            onImport={async () => { const result = await window.ailover?.character.importCard(); if (result) { const value = result.character; if (result.environment) window.localStorage.setItem(`ailover.scene.${value.id}`, result.environment); setCharacter(value); setCharacters(await window.ailover?.character.list() ?? [value]); window.alert(result.recognizedUser ? '角色认出了你的用户标识，已恢复共同经历。' : '角色不认识当前用户标识，将把你当作第一次见面的陌生人。'); } }}
             onSwitch={async (id) => { const value = await window.ailover?.character.switch(id); if (value) setCharacter(value); }}
             onDelete={async (id) => { await window.ailover?.character.delete(id); const list = await window.ailover?.character.list() ?? []; setCharacters(list); setCharacter(list[0] ?? null); }}
             onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
@@ -847,7 +847,7 @@ function Onboarding({ initialDraft, initialModelConfigured, onDraftChange, onCom
   </div>;
 }
 
-function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
+function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void }): React.JSX.Element {
   const [profile, setProfile] = useState<ModelProfileInput>({
     provider: 'openai-compatible', endpoint: 'https://api.openai.com/v1', model: 'gpt-4.1-mini',
   });
@@ -1014,6 +1014,8 @@ function ModelSettings({ onSaved }: { onSaved(): void }): React.JSX.Element {
     </section><section className="settings-section data-settings">
       <div className="settings-heading"><h3>本地数据</h3>
         <p>备份包含角色、聊天记录、记忆与角色图片，不包含模型密钥。</p></div>
+      <label><span>用户唯一标识</span><input value={userId} readOnly />
+        <small>角色卡通过此标识判断是否认识你。该标识由本机生成，请勿随意修改应用数据。</small></label>
       {dataResult && <div className={dataResult.ok ? 'connection-result success' : 'connection-result error'}>
         <strong>{dataResult.ok ? '操作完成' : '操作失败'}</strong><span>{dataResult.message}</span></div>}
       <div className="data-actions"><button className="secondary-action" type="button"

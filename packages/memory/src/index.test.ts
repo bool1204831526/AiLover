@@ -214,7 +214,7 @@ describe('MemoryService', () => {
 });
 
 describe('EpisodicMemoryService', () => {
-  const base = { characterId: 'character-1', characterName: '艾琳',
+  const base = { userId: 'user-1', characterId: 'character-1', characterName: '艾琳',
     conversationId: 'conversation-1', userMessageId: 'message-1', now: new Date('2026-09-11T00:00:00Z') };
 
   it('rejects ordinary chat and recognizes high-value shared experiences', () => {
@@ -222,6 +222,7 @@ describe('EpisodicMemoryService', () => {
     const episode = extractEpisodeCandidate({ ...base,
       userText: '我们之前一起准备了很久，今天终于完成面试了', aiText: '你真的做到了。' });
     expect(episode?.kind).toBe('shared-achievement');
+    expect(episode?.participants).toEqual(['user-1', 'character-1']);
     expect(episode?.importance).toBeGreaterThanOrEqual(0.65);
     expect(episode?.summary).toContain('你真的做到了');
   });
