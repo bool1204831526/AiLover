@@ -15,6 +15,26 @@ const BackupEntrySchema = z.object({
   data: z.string().min(1),
 }).strict();
 
+export const CHARACTER_CARD_TABLES = [
+  'characters', 'personality_baselines', 'character_lore', 'conversations', 'messages', 'memories',
+  'memory_sources', 'memory_links', 'memory_recalls', 'emotion_states', 'relationship_states',
+  'personality_states', 'personality_evidence', 'reflections', 'character_visual_identities', 'assets',
+  'episodic_memories', 'episode_sources', 'episode_recalls', 'future_intentions', 'consolidated_memories',
+  'consolidated_memory_sources', 'self_model_entries', 'memory_deletions', 'memory_resolutions',
+] as const;
+const CardScalarSchema = z.union([z.string(), z.number(), z.null()]);
+const CardRowSchema = z.record(z.string().min(1).max(100), CardScalarSchema);
+const CharacterCardSchema = z.object({ format: z.literal('ailover-character'), version: z.literal(1),
+  appVersion: z.string().min(1).max(50), createdAt: z.iso.datetime(), characterName: z.string().min(1).max(40), environment: z.string().max(3000).nullable(),
+  data: z.record(z.string(), z.array(CardRowSchema).max(100_000)).superRefine((data, context) => {
+    const allowed = new Set<string>(CHARACTER_CARD_TABLES);
+    if (Object.keys(data).some((table) => !allowed.has(table))) context.addIssue({ code: 'custom', message: '角色卡包含未知数据表。' });
+  }),
+  assets: z.array(BackupEntrySchema).max(MAX_ASSETS),
+}).strict();
+export type CharacterCardData = Record<string, Record<string, string | number | null>[]>;
+export type ParsedCharacterCard = { appVersion: string; createdAt: Date; characterName: string;
+  data: CharacterCardData; assets: BackupBinaryEntry[]; environment: string | null };
 const BackupDocumentSchema = z.object({
   format: z.literal('ailover-backup'),
   version: z.literal(1),
@@ -87,6 +107,28 @@ export function parseBackupDocument(source: string): ParsedBackup {
     database: database.data, assets };
 }
 
+export function createCharacterCardDocument(input: { appVersion: string; createdAt: Date;
+  characterName: string; data: CharacterCardData; assets: BackupBinaryEntry[]; environment?: string }): string {
+  const total = input.assets.reduce((sum, asset) => sum + asset.data.byteLength, 0);
+  if (total > MAX_TOTAL_BYTES) throw new Error('角色卡资产超过 512 MB 限制。');
+  return JSON.stringify(CharacterCardSchema.parse({ format: 'ailover-character', version: 1,
+    appVersion: input.appVersion, createdAt: input.createdAt.toISOString(), characterName: input.characterName,
+    environment: input.environment ?? null, data: input.data,
+    assets: input.assets.map((asset) => encodeEntry(asset, MAX_FILE_BYTES)) }));
+}
+
+export function parseCharacterCardDocument(source: string): ParsedCharacterCard {
+  if (Buffer.byteLength(source, 'utf8') > 700 * 1024 * 1024) throw new Error('角色卡文件过大。');
+  const document = CharacterCardSchema.parse(JSON.parse(source) as unknown);
+  const assets = document.assets.map((entry) => {
+    assertSafeRelativePath(entry.path); const data = Buffer.from(entry.data, 'base64');
+    if (data.toString('base64') !== entry.data || data.byteLength !== entry.size || checksum(data) !== entry.checksum)
+      throw new Error('角色卡资产完整性校验失败。');
+    return { path: entry.path, data };
+  });
+  return { appVersion: document.appVersion, createdAt: new Date(document.createdAt),
+    characterName: document.characterName, environment: document.environment, data: document.data, assets };
+}
 export async function readAssetEntries(root: string): Promise<BackupBinaryEntry[]> {
   const entries: BackupBinaryEntry[] = [];
   async function visit(directory: string): Promise<void> {

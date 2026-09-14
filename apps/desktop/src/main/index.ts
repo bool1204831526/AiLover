@@ -18,7 +18,8 @@ import {
   type CodexPetManifest, type DesktopPetPackManifest,
   type ChatStreamEvent, type DesktopPetRuntimeState,
 } from '@ailover/contracts';
-import { createBackupDocument, parseBackupDocument, readAssetEntries } from '@ailover/backup';
+import { CHARACTER_CARD_TABLES, createBackupDocument, createCharacterCardDocument, parseBackupDocument,
+  parseCharacterCardDocument, readAssetEntries, type CharacterCardData } from '@ailover/backup';
 import { analyzeInteraction, CognitionService, createResponsePlan, createSelfModelEntries, projectCognition,
   relationshipSummary, summarizePersonalityEvidence } from '@ailover/cognition';
 import { assembleChatContext, CharacterService, fitDesktopPetBounds, hasOutOfCharacterLeakage, shouldSendCompanionPrompt,
@@ -446,6 +447,88 @@ async function importDesktopPetPack(character: Character, sourceDirectory: strin
   return readDesktopPetPack(character.id);
 }
 
+type CardRow = Record<string, string | number | null>;
+
+function collectCharacterCardData(characterId: string): CharacterCardData {
+  const all = (query: string) => database.sqlite.prepare(query).all(characterId) as CardRow[];
+  const data: CharacterCardData = {};
+  data.characters = all('SELECT * FROM characters WHERE id = ?');
+  for (const table of ['personality_baselines', 'character_lore', 'emotion_states', 'relationship_states',
+    'personality_states', 'personality_evidence', 'reflections', 'character_visual_identities', 'assets',
+    'episodic_memories', 'future_intentions', 'consolidated_memories', 'self_model_entries',
+    'memory_deletions', 'memory_resolutions']) data[table] = all(`SELECT * FROM ${table} WHERE character_id = ?`);
+  data.conversations = all('SELECT * FROM conversations WHERE character_id = ?');
+  data.messages = all('SELECT * FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE character_id = ?)');
+  data.memories = all('SELECT * FROM memories WHERE character_id = ?');
+  data.memory_sources = all('SELECT * FROM memory_sources WHERE memory_id IN (SELECT id FROM memories WHERE character_id = ?)');
+  data.memory_links = all('SELECT * FROM memory_links WHERE from_memory_id IN (SELECT id FROM memories WHERE character_id = ?)');
+  data.memory_recalls = all('SELECT * FROM memory_recalls WHERE memory_id IN (SELECT id FROM memories WHERE character_id = ?)');
+  data.episode_sources = all('SELECT * FROM episode_sources WHERE episode_id IN (SELECT id FROM episodic_memories WHERE character_id = ?)');
+  data.episode_recalls = all('SELECT * FROM episode_recalls WHERE episode_id IN (SELECT id FROM episodic_memories WHERE character_id = ?)');
+  data.consolidated_memory_sources = all('SELECT * FROM consolidated_memory_sources WHERE consolidated_memory_id IN (SELECT id FROM consolidated_memories WHERE character_id = ?)');
+  for (const table of CHARACTER_CARD_TABLES) data[table] ??= [];
+  return data;
+}
+
+function importCharacterCardData(data: CharacterCardData, assetPaths: Map<string, string>, newCharacterId: string): string {
+  const rows = (table: string) => data[table] ?? [];
+  if (rows('characters').length !== 1) throw new Error('角色卡必须包含且只能包含一个角色。');
+  const oldCharacterId = String(rows('characters')[0]!.id);
+  const makeMap = (table: string) => new Map(rows(table).map((row) => [String(row.id), randomUUID()]));
+  const conversationIds = makeMap('conversations'); const messageIds = makeMap('messages');
+  const memoryIds = makeMap('memories'); const episodeIds = makeMap('episodic_memories');
+  const consolidatedIds = makeMap('consolidated_memories'); const assetIds = makeMap('assets');
+  const idMaps: Record<string, Map<string, string>> = { conversations: conversationIds, messages: messageIds,
+    memories: memoryIds, episodic_memories: episodeIds, consolidated_memories: consolidatedIds, assets: assetIds };
+  const ref = (value: string | number | null, map: Map<string, string>) => value === null ? null : map.get(String(value)) ?? null;
+  const mapJsonIds = (value: string | number | null, map: Map<string, string>) => {
+    if (typeof value !== 'string') return value;
+    try { const parsed = JSON.parse(value) as unknown; return Array.isArray(parsed)
+      ? JSON.stringify(parsed.map((item) => map.get(String(item)) ?? item)) : value; } catch { return value; }
+  };
+  const transform = (table: string, source: CardRow): CardRow => {
+    const row = { ...source };
+    if ('character_id' in row) row.character_id = newCharacterId;
+    if (table === 'characters') { row.id = newCharacterId; row.user_id = 'local-user'; row.status = 'archived';
+      row.name = `${String(row.name).slice(0, 35)}（导入）`; row.updated_at = new Date().toISOString(); }
+    else if (idMaps[table] && row.id !== null) row.id = idMaps[table]!.get(String(row.id))!;
+    else if ('id' in row && !['memory_sources', 'memory_recalls', 'personality_evidence', 'episode_recalls'].includes(table)) row.id = randomUUID();
+    if ('conversation_id' in row) row.conversation_id = ref(row.conversation_id, conversationIds);
+    if ('message_id' in row) row.message_id = ref(row.message_id, messageIds);
+    if ('source_message_id' in row) row.source_message_id = ref(row.source_message_id, messageIds);
+    if ('trigger_message_id' in row) row.trigger_message_id = ref(row.trigger_message_id, messageIds);
+    if ('query_message_id' in row) row.query_message_id = ref(row.query_message_id, messageIds);
+    if ('memory_id' in row) row.memory_id = ref(row.memory_id, memoryIds);
+    if ('from_memory_id' in row) row.from_memory_id = ref(row.from_memory_id, memoryIds);
+    if ('to_memory_id' in row) row.to_memory_id = ref(row.to_memory_id, memoryIds);
+    if ('related_memory_id' in row) row.related_memory_id = ref(row.related_memory_id, memoryIds);
+    if ('chosen_memory_id' in row) row.chosen_memory_id = ref(row.chosen_memory_id, memoryIds);
+    if ('episode_id' in row) row.episode_id = ref(row.episode_id, episodeIds);
+    if ('consolidated_memory_id' in row) row.consolidated_memory_id = ref(row.consolidated_memory_id, consolidatedIds);
+    if ('related_memory_ids' in row) row.related_memory_ids = mapJsonIds(row.related_memory_ids, memoryIds);
+    if ('source_memory_ids' in row) row.source_memory_ids = mapJsonIds(row.source_memory_ids, memoryIds);
+    if (table === 'assets') { const path = assetPaths.get(String(source.id));
+      if (!path) throw new Error('角色卡缺少角色资产文件。'); row.local_path = path; }
+    if (['memory_sources', 'memory_recalls', 'personality_evidence', 'episode_recalls'].includes(table)) delete row.id;
+    return row;
+  };
+  const order = ['characters', 'personality_baselines', 'character_lore', 'conversations', 'messages', 'memories',
+    'memory_sources', 'memory_links', 'memory_recalls', 'emotion_states', 'relationship_states', 'personality_states',
+    'personality_evidence', 'reflections', 'character_visual_identities', 'assets', 'episodic_memories',
+    'episode_sources', 'episode_recalls', 'future_intentions', 'consolidated_memories',
+    'consolidated_memory_sources', 'self_model_entries', 'memory_deletions', 'memory_resolutions'];
+  database.sqlite.transaction(() => {
+    for (const table of order) for (const source of rows(table)) {
+      const row = transform(table, source); const columns = Object.keys(row);
+      const allowed = new Set((database.sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(({ name }) => name));
+      if (columns.some((column) => !allowed.has(column))) throw new Error('角色卡包含未知字段。');
+      database.sqlite.prepare(`INSERT INTO ${table} (${columns.map((column) => `"${column}"`).join(',')}) VALUES (${columns.map(() => '?').join(',')})`)
+        .run(...columns.map((column) => row[column]));
+    }
+  })();
+  if (oldCharacterId === newCharacterId) throw new Error('角色卡标识重映射失败。');
+  return newCharacterId;
+}
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
     const current = await characterService.findCurrent();
@@ -498,6 +581,49 @@ function registerIpcHandlers(): void {
       const next = remaining[0];
       if (next) await characterService.activate(next.id);
     }
+  });
+  ipcMain.handle(IPC_CHANNELS.characterCardExport, async (_event, environment: unknown) => {
+    if (!mainWindow) return null;
+    const character = await characterService.findCurrent();
+    if (!character) throw new Error('请先创建或选择角色。');
+    const destination = await dialog.showSaveDialog(mainWindow, { title: '导出角色卡',
+      defaultPath: join(app.getPath('documents'), `${character.name}.ailover-character`),
+      filters: [{ name: 'AiLover 角色卡', extensions: ['ailover-character'] }] });
+    if (destination.canceled || !destination.filePath) return null;
+    const data = collectCharacterCardData(character.id);
+    const assets = await Promise.all((data.assets ?? []).map(async (row) => ({
+      path: `assets/${String(row.id)}${extname(String(row.local_path)).toLowerCase()}`,
+      data: await readFile(String(row.local_path)),
+    })));
+    const document = createCharacterCardDocument({ appVersion: app.getVersion(), createdAt: new Date(),
+      characterName: character.name, data, assets,
+      ...(typeof environment === 'string' ? { environment: environment.slice(0, 3000) } : {}) });
+    await writeFile(destination.filePath, document, 'utf8');
+    return DataOperationResultSchema.parse({ ok: true, message: '角色卡已导出，包含角色资料、记忆、关系、对话和角色资产。',
+      fileName: basename(destination.filePath), requiresRestart: false });
+  });
+  ipcMain.handle(IPC_CHANNELS.characterCardImport, async () => {
+    if (!mainWindow) return null;
+    const selection = await dialog.showOpenDialog(mainWindow, { title: '导入角色卡', properties: ['openFile'],
+      filters: [{ name: 'AiLover 角色卡', extensions: ['ailover-character'] }] });
+    const sourcePath = selection.filePaths[0];
+    if (selection.canceled || !sourcePath) return null;
+    const parsed = parseCharacterCardDocument(await readFile(sourcePath, 'utf8'));
+    const newCharacterId = randomUUID(); const directory = join(assetRoot, newCharacterId);
+    const assetPaths = new Map<string, string>();
+    try {
+      await mkdir(directory, { recursive: true });
+      for (const asset of parsed.assets) {
+        const name = basename(asset.path); const oldAssetId = name.slice(0, name.length - extname(name).length);
+        const destination = join(directory, name); await writeFile(destination, asset.data);
+        assetPaths.set(oldAssetId, destination);
+      }
+      importCharacterCardData(parsed.data, assetPaths, newCharacterId);
+      await characterService.activate(newCharacterId as Character['id']);
+      const current = await characterService.findCurrent();
+      if (!current) throw new Error('角色卡导入后无法读取角色。');
+      return { character: toCharacterSnapshot(current), environment: parsed.environment };
+    } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
   });
   ipcMain.handle(IPC_CHANNELS.characterLoreGenerate, async (_event, input: unknown) => {
     const draft = CharacterDraftSchema.parse(input);

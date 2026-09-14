@@ -5,6 +5,7 @@ import {
   CharacterDraftSchema,
   CharacterLoreSchema,
   CharacterSnapshotSchema,
+  CharacterCardImportResultSchema,
   ChatSendInputSchema,
   ChatSendReceiptSchema,
   ChatStreamEventSchema,
@@ -48,6 +49,10 @@ const api: AiLoverDesktopApi = {
     list: async () => CharacterSnapshotSchema.array().parse(await ipcRenderer.invoke(IPC_CHANNELS.characterList)),
     switch: async (id) => CharacterSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.characterSwitch, id)),
     delete: async (id) => { await ipcRenderer.invoke(IPC_CHANNELS.characterDelete, id); },
+    exportCard: async (environment) => { const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterCardExport, environment);
+      return result === null ? null : DataOperationResultSchema.parse(result); },
+    importCard: async () => { const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterCardImport);
+      return result === null ? null : CharacterCardImportResultSchema.parse(result); },
     generateLore: async (draft) => {
       const input = CharacterDraftSchema.parse(draft);
       const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.characterLoreGenerate, input);

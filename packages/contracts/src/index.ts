@@ -7,6 +7,8 @@ export const IPC_CHANNELS = {
   characterList: 'character:list',
   characterSwitch: 'character:switch',
   characterDelete: 'character:delete',
+  characterCardExport: 'character-card:export',
+  characterCardImport: 'character-card:import',
   characterLoreGenerate: 'character-lore:generate',
   characterLoreUpdate: 'character-lore:update',
   modelProfileGet: 'model-profile:get',
@@ -294,6 +296,9 @@ export const CharacterSnapshotSchema = CharacterDraftSchema.extend({
 });
 
 export type CharacterSnapshot = z.infer<typeof CharacterSnapshotSchema>;
+export const CharacterCardImportResultSchema = z.object({ character: CharacterSnapshotSchema,
+  environment: z.string().max(3000).nullable() });
+export type CharacterCardImportResult = z.infer<typeof CharacterCardImportResultSchema>;
 
 export const AppErrorSchema = z.object({
   code: z.string().min(1),
@@ -379,6 +384,8 @@ export interface AiLoverDesktopApi {
     list(): Promise<CharacterSnapshot[]>;
     switch(id: string): Promise<CharacterSnapshot>;
     delete(id: string): Promise<void>;
+    exportCard(environment?: string): Promise<DataOperationResult | null>;
+    importCard(): Promise<CharacterCardImportResult | null>;
     generateLore(draft: CharacterDraftInput): Promise<CharacterLoreInput>;
     updateLore(lore: CharacterLoreInput): Promise<CharacterSnapshot>;
   };

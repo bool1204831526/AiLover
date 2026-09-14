@@ -151,7 +151,9 @@ export function App(): React.JSX.Element {
         ? <RelationshipView character={character} /> : activeSection === 'character'
           ? <CharacterView character={character} visual={visual} onVisualChange={setVisual}
             onCharacterChange={(value) => { setCharacter(value); setCharacters((current) => current.map((item) => item.id === value.id ? value : item)); }}
-            characters={characters} onSwitch={async (id) => { const value = await window.ailover?.character.switch(id); if (value) setCharacter(value); }}
+            characters={characters} onExport={async () => { const result = await window.ailover?.character.exportCard(character ? window.localStorage.getItem(`ailover.scene.${character.id}`) ?? undefined : undefined); if (result) window.alert(result.message); }}
+            onImport={async () => { const result = await window.ailover?.character.importCard(); if (result) { const value = result.character; if (result.environment) window.localStorage.setItem(`ailover.scene.${value.id}`, result.environment); setCharacter(value); setCharacters(await window.ailover?.character.list() ?? [value]); } }}
+            onSwitch={async (id) => { const value = await window.ailover?.character.switch(id); if (value) setCharacter(value); }}
             onDelete={async (id) => { await window.ailover?.character.delete(id); const list = await window.ailover?.character.list() ?? []; setCharacters(list); setCharacter(list[0] ?? null); }}
             onCreate={() => setCreatorOpen(true)} /> : activeSection === 'memory'
               ? <MemoryView character={character} onOpenSource={(messageId) => {
@@ -302,11 +304,12 @@ function memoryResolutionLabel(resolution: MemoryCenterEntry['relations'][number
     'keep-both': '两者并存', merge: '已合并' })[resolution];
 }
 
-function CharacterView({ character, visual, onVisualChange, onCharacterChange, characters, onSwitch, onDelete, onCreate }: {
+function CharacterView({ character, visual, onVisualChange, onCharacterChange, characters, onSwitch, onDelete, onExport, onImport, onCreate }: {
   character: CharacterSnapshot | null; visual: CharacterVisualProfile | null;
   onVisualChange(value: CharacterVisualProfile | null): void;
   onCharacterChange(value: CharacterSnapshot): void; onCreate(): void;
   characters: CharacterSnapshot[]; onSwitch(id: string): Promise<void>; onDelete(id: string): Promise<void>;
+  onExport(): Promise<void>; onImport(): Promise<void>;
 }): React.JSX.Element {
   const [capabilities, setCapabilities] = useState<ImageCapabilities | null>(null);
   const [importing, setImporting] = useState(false);
@@ -371,7 +374,7 @@ function CharacterView({ character, visual, onVisualChange, onCharacterChange, c
       <select aria-label="切换角色" value={character?.id ?? ''} onChange={(event) => void onSwitch(event.target.value)} disabled={!character}>
         {characters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <button className="secondary-action" type="button" onClick={onCreate}>创建角色</button>
+      <button className="secondary-action" type="button" onClick={() => void onImport()}><Upload size={15} />导入角色卡</button><button className="secondary-action" type="button" disabled={!character} onClick={() => void onExport()}><Download size={15} />导出角色卡</button><button className="secondary-action" type="button" onClick={onCreate}>创建角色</button>
       {character && <button className="icon-button danger" type="button" title="删除当前角色" aria-label="删除当前角色"
         onClick={() => { if (window.confirm(`确定删除角色“${character.name}”及其全部对话和记忆吗？`)) void onDelete(character.id); }}><Trash2 size={16} /></button>}
     </div></header>
