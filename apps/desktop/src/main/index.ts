@@ -7,7 +7,7 @@ import { basename, extname, join, resolve, sep } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray } from 'electron';
 
 import {
-  BootstrapResponseSchema, CharacterCardImportResultSchema, CharacterDraftSchema, CharacterLoreSchema,
+  AccountCredentialsSchema, BootstrapResponseSchema, CharacterCardImportResultSchema, CharacterDraftSchema, CharacterLoreSchema,
   CharacterSnapshotSchema, ChatMessageSchema,
   ChatSendInputSchema, ChatSendReceiptSchema, ChatStreamEventSchema, ConversationHistorySchema,
   ConversationSnapshotSchema, ConversationContextInputSchema, ConversationSearchInputSchema, IPC_CHANNELS, ModelConnectionResultSchema, ModelProfileInputSchema,
@@ -44,7 +44,7 @@ import { createSanitizedDatabaseSnapshot, CURRENT_SCHEMA_VERSION, openAppDatabas
   SqliteFutureIntentionRepository,
   SqliteSelfModelRepository,
   SqliteDesktopPetWindowStateRepository,
-  validateRestoredDatabase } from '@ailover/persistence';
+  validateRestoredDatabase, listLocalAccounts, loginLocalAccount, logoutLocalAccount, registerLocalAccount } from '@ailover/persistence';
 import { SqliteVisualAssetRepository, type StoredCharacterAsset } from '@ailover/persistence';
 
 import { loadAppConfig } from './config';
@@ -534,7 +534,23 @@ function importCharacterCardData(data: CharacterCardData, assetPaths: Map<string
   return newCharacterId;
 }
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
+  ipcMain.handle(IPC_CHANNELS.accountList, async () => listLocalAccounts(database));
+  ipcMain.handle(IPC_CHANNELS.accountRegister, async (_event, input: unknown) => {
+    const value = AccountCredentialsSchema.parse(input);
+    const account = registerLocalAccount(database, value.username, value.password);
+    restartApplication();
+    return account;
+  });
+  ipcMain.handle(IPC_CHANNELS.accountLogin, async (_event, input: unknown) => {
+    const value = AccountCredentialsSchema.parse(input);
+    const account = loginLocalAccount(database, value.username, value.password);
+    restartApplication();
+    return account;
+  });
+  ipcMain.handle(IPC_CHANNELS.accountLogout, async () => {
+    logoutLocalAccount(database);
+    restartApplication();
+  });  ipcMain.handle(IPC_CHANNELS.appBootstrap, async () => {
     const current = await characterService.findCurrent();
     const response = BootstrapResponseSchema.parse({
       appVersion: app.getVersion(),

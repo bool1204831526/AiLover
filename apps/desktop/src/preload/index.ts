@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import {
-  BootstrapResponseSchema,
+  AccountCredentialsSchema, AccountSnapshotSchema, BootstrapResponseSchema,
   CharacterDraftSchema,
   CharacterLoreSchema,
   CharacterSnapshotSchema,
@@ -32,7 +32,12 @@ import {
 } from '@ailover/contracts';
 
 const api: AiLoverDesktopApi = {
-  bootstrap: async () => {
+  account: {
+    register: async (input) => { const value = AccountCredentialsSchema.parse(input); return AccountSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.accountRegister, value)); },
+    login: async (input) => { const value = AccountCredentialsSchema.parse(input); return AccountSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.accountLogin, value)); },
+    logout: async () => { await ipcRenderer.invoke(IPC_CHANNELS.accountLogout); },
+    list: async () => AccountSnapshotSchema.array().parse(await ipcRenderer.invoke(IPC_CHANNELS.accountList)),
+  },  bootstrap: async () => {
     const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.appBootstrap);
     return BootstrapResponseSchema.parse(result);
   },

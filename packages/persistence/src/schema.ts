@@ -6,6 +6,7 @@ export const users = sqliteTable('users', {
   locale: text('locale').notNull(),
   timezone: text('timezone').notNull(),
   createdAt: text('created_at').notNull(),
+  passwordHash: text('password_hash'),
 });
 
 export const companionSettings = sqliteTable('companion_settings', {
@@ -214,4 +215,5 @@ export const memoryResolutions = sqliteTable('memory_resolutions', {
   action: text('action').notNull(), chosenMemoryId: text('chosen_memory_id').references(() => memories.id),
   mergedContent: text('merged_content'), previousState: text('previous_state').notNull(),
   createdAt: text('created_at').notNull(),
+  passwordHash: text('password_hash'),
 });

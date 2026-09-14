@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 export const IPC_CHANNELS = {
   appBootstrap: 'app:bootstrap',
+  accountRegister: 'account:register',
+  accountLogin: 'account:login',
+  accountLogout: 'account:logout',
+  accountList: 'account:list',
   characterCreate: 'character:create',
   characterGetCurrent: 'character:get-current',
   characterList: 'character:list',
@@ -327,6 +331,10 @@ export const BootstrapResponseSchema = z.object({
   currentCharacter: CharacterSnapshotSchema.nullable(),
 });
 
+export const AccountCredentialsSchema = z.object({ username: z.string().trim().min(2).max(40), password: z.string().min(8).max(200) });
+export type AccountCredentials = z.infer<typeof AccountCredentialsSchema>;
+export const AccountSnapshotSchema = z.object({ id: z.uuid(), username: z.string(), isCurrent: z.boolean() });
+export type AccountSnapshot = z.infer<typeof AccountSnapshotSchema>;
 export type BootstrapResponse = z.infer<typeof BootstrapResponseSchema>;
 
 export const RelationshipMilestoneSchema = z.object({
@@ -379,6 +387,7 @@ export type MemoryResolution = z.infer<typeof MemoryResolutionSchema>;
 
 export interface AiLoverDesktopApi {
   bootstrap(): Promise<BootstrapResponse>;
+  account: { register(input: AccountCredentials): Promise<AccountSnapshot>; login(input: AccountCredentials): Promise<AccountSnapshot>; logout(): Promise<void>; list(): Promise<AccountSnapshot[]>; }; 
   character: {
     create(draft: CharacterDraftInput): Promise<CharacterSnapshot>;
     getCurrent(): Promise<CharacterSnapshot | null>;

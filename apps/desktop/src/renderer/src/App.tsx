@@ -863,6 +863,9 @@ function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void })
     desktopPetRoamingEnabled: true,
   });
   const [companionSaved, setCompanionSaved] = useState(false);
+  const [accountUsername, setAccountUsername] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountMessage, setAccountMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const api = window.ailover;
@@ -875,6 +878,15 @@ function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void })
     void api.companion.getSettings().then(setCompanionSettings);
   }, []);
 
+  async function accountAction(action: 'register' | 'login'): Promise<void> {
+    setAccountMessage(null);
+    try {
+      if (!window.ailover) return;
+      if (action === 'register') await window.ailover.account.register({ username: accountUsername, password: accountPassword });
+      else await window.ailover.account.login({ username: accountUsername, password: accountPassword });
+      setAccountMessage('账户已切换，应用正在重新启动。');
+    } catch (error) { setAccountMessage(error instanceof Error ? error.message : '账户操作失败。'); }
+  }
   async function saveCompanionSettings(): Promise<void> {
     setCompanionSaved(false);
     try {
@@ -983,6 +995,12 @@ function ModelSettings({ userId, onSaved }: { userId: string; onSaved(): void })
         onClick={() => void testConnection()} type="button">{busy === 'test' ? '正在测试' : '测试连接'}</button>
         <button className="primary-action" disabled={busy !== null || !profile.endpoint || !profile.model}
           onClick={() => void saveProfile()} type="button">{busy === 'save' ? '正在保存' : '保存配置'}</button></div>
+    </section><section className="settings-section account-settings">
+      <div className="settings-heading"><h3>本地账户</h3><p>账户仅保存在本机。切换账户后，角色、对话、记忆和关系会使用对应账户的数据。</p></div>
+      <label><span>用户名</span><input value={accountUsername} maxLength={40} onChange={(event) => setAccountUsername(event.target.value)} placeholder="至少 2 个字符" /></label>
+      <label><span>密码</span><input type="password" value={accountPassword} maxLength={200} onChange={(event) => setAccountPassword(event.target.value)} placeholder="至少 8 个字符" /></label>
+      {accountMessage && <div className="connection-result success"><span>{accountMessage}</span></div>}
+      <div className="settings-actions"><button className="secondary-action" type="button" disabled={accountUsername.trim().length < 2 || accountPassword.length < 8} onClick={() => void accountAction('login')}>登录并切换</button><button className="primary-action" type="button" disabled={accountUsername.trim().length < 2 || accountPassword.length < 8} onClick={() => void accountAction('register')}>注册新账户</button></div>
     </section><section className="settings-section companion-settings">
       <div className="settings-heading"><h3>主动陪伴</h3>
         <p>长时间没有互动时发送桌面提醒，并自动避开免打扰时段。</p></div>

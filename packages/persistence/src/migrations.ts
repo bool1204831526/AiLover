@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const CURRENT_SCHEMA_VERSION = 19;
+export const CURRENT_SCHEMA_VERSION = 20;
 
 const migrations = [{
   version: 1,
@@ -444,7 +444,9 @@ const migrations = [{
       id TEXT PRIMARY KEY NOT NULL CHECK(id = 'current-user'),
       user_id TEXT NOT NULL REFERENCES users(id)
     );
-  `,
+  `,}, {
+  version: 20,
+  sql: `ALTER TABLE users ADD COLUMN password_hash TEXT;`,
 }] as const;
 
 export function migrate(database: Database.Database): void {
@@ -456,7 +458,11 @@ export function migrate(database: Database.Database): void {
   for (const migration of migrations) {
     if (versions.has(migration.version)) continue;
     database.transaction(() => {
-      database.exec(migration.sql);
+      if (migration.version === 20) {
+        const hasPasswordHash = (database.prepare("PRAGMA table_info(users)").all() as { name: string }[])
+          .some((column) => column.name === 'password_hash');
+        if (!hasPasswordHash) database.exec(migration.sql);
+      } else database.exec(migration.sql);
       database.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
         .run(migration.version, new Date().toISOString());
     })();

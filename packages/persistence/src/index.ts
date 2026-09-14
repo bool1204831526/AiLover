@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 
@@ -64,6 +64,48 @@ function initializeUserIdentity(sqlite: Database.Database): string {
   return userId;
 }
 
+export type LocalAccount = { id: string; username: string; isCurrent: boolean };
+
+function passwordHash(password: string): string {
+  const salt = randomBytes(16).toString('hex');
+  return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
+}
+
+function passwordMatches(password: string, stored: string | null): boolean {
+  if (!stored) return false;
+  const [salt, digest] = stored.split(':');
+  if (!salt || !digest) return false;
+  const actual = scryptSync(password, salt, 64);
+  const expected = Buffer.from(digest, 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function listLocalAccounts(database: AppDatabase): LocalAccount[] {
+  return database.sqlite.prepare('SELECT id, display_name FROM users ORDER BY created_at').all()
+    .map((row) => ({ id: String((row as { id: string }).id), username: String((row as { display_name: string }).display_name),
+      isCurrent: String((row as { id: string }).id) === database.userId }));
+}
+
+export function registerLocalAccount(database: AppDatabase, username: string, password: string): LocalAccount {
+  const id = randomUUID();
+  database.sqlite.prepare('INSERT INTO users(id, display_name, locale, timezone, created_at, password_hash) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, username, 'zh-CN', 'Asia/Shanghai', new Date().toISOString(), passwordHash(password));
+  database.sqlite.prepare("UPDATE app_identity SET user_id = ? WHERE id = 'current-user'").run(id);
+  return { id, username, isCurrent: true };
+}
+
+export function loginLocalAccount(database: AppDatabase, username: string, password: string): LocalAccount {
+  const row = database.sqlite.prepare('SELECT id, display_name, password_hash FROM users WHERE display_name = ? COLLATE NOCASE')
+    .get(username) as { id: string; display_name: string; password_hash: string | null } | undefined;
+  if (!row || !passwordMatches(password, row.password_hash)) throw new Error('用户名或密码错误。');
+  database.sqlite.prepare("UPDATE app_identity SET user_id = ? WHERE id = 'current-user'").run(row.id);
+  return { id: row.id, username: row.display_name, isCurrent: true };
+}
+
+export function logoutLocalAccount(database: AppDatabase): void {
+  const first = database.sqlite.prepare('SELECT id FROM users ORDER BY created_at LIMIT 1').get() as { id: string } | undefined;
+  if (first) database.sqlite.prepare("UPDATE app_identity SET user_id = ? WHERE id = 'current-user'").run(first.id);
+}
 export function openAppDatabase(path: string): AppDatabase {
   mkdirSync(dirname(path), { recursive: true });
   const sqlite = new Database(path);
