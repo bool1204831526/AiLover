@@ -71,7 +71,10 @@ describe('character consistency guard', () => {
 describe('companion scheduling', () => {
   const settings = { enabled: true, intervalMinutes: 30, quietStart: '23:00', quietEnd: '07:00',
     desktopPetEnabled: false, desktopPetRoamingEnabled: true };
-  const date = (value: string) => new Date(`2026-09-11T${value}:00+08:00`);
+  const date = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number) as [number, number];
+    return new Date(2026, 8, 11, hours, minutes);
+  };
 
   it('nudges only after inactivity interval and never twice in one interval', () => {
     expect(shouldSendCompanionPrompt({ now: date('12:31'), lastInteractionAt: date('12:00'), lastPromptAt: null, settings })).toBe(true);
